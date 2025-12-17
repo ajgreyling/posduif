@@ -1,0 +1,88 @@
+# Go Sync Engine Rules
+
+## Language & Version
+- Use Go 1.21 or later
+- Follow Go best practices and conventions
+- Use `gofmt` and `golint` for code formatting
+
+## Dependencies - FOSS ONLY
+
+### Allowed Libraries (Examples of FOSS Go libraries):
+- **HTTP Server**: `net/http` (stdlib), `github.com/gorilla/mux` (Apache 2.0)
+- **Database**: `github.com/jackc/pgx/v5` (MIT), `github.com/lib/pq` (MIT)
+- **Redis**: `github.com/redis/go-redis/v9` (BSD 2-Clause)
+- **JWT**: `github.com/golang-jwt/jwt/v5` (MIT)
+- **Config**: `gopkg.in/yaml.v3` (Apache 2.0), `github.com/spf13/viper` (MIT)
+- **Logging**: `log/slog` (stdlib), `github.com/sirupsen/logrus` (MIT)
+- **Testing**: `testing` (stdlib), `github.com/stretchr/testify` (MIT)
+- **Compression**: `compress/gzip` (stdlib)
+
+### Forbidden:
+- Any library requiring a license key or subscription
+- Proprietary or commercial-only libraries
+- Libraries with restrictive licenses (GPL, AGPL, etc.)
+- Libraries that depend on third-party SaaS services
+
+## Project Structure
+
+```
+cmd/sync-engine/     # Application entry point
+internal/            # Private application code
+  api/              # HTTP handlers, middleware, SSE
+  database/         # PostgreSQL connection and queries
+  models/           # Data models
+  enrollment/       # Enrollment service
+  sync/             # Sync logic
+  message/          # Message service
+  redis/            # Redis client
+  compression/      # Compression utilities
+config/             # Configuration files
+```
+
+## Code Guidelines
+
+- Use `internal/` package for private code (not importable by other projects)
+- Keep handlers thin - delegate to service layer
+- Use interfaces for testability
+- Implement graceful shutdown with context cancellation
+- Use connection pooling for database and Redis
+- Implement proper error handling with structured errors
+- Use structured logging (JSON format preferred)
+- Write unit tests for all business logic
+- Use transactions for multi-step database operations
+
+## Database
+
+- Use prepared statements to prevent SQL injection
+- Support schema-per-tenant isolation
+- Implement connection pooling (configurable pool size)
+- Use migrations for schema changes
+- Support query timeouts
+
+## API Design
+
+- Follow RESTful conventions
+- Use proper HTTP status codes
+- Implement consistent error response format
+- Support compression (gzip) for large payloads
+- Implement rate limiting
+- Use JWT for authentication
+- Support CORS for web clients
+
+## Performance
+
+- Use goroutines for concurrent operations
+- Implement connection pooling
+- Cache frequently accessed data
+- Use batch operations for sync
+- Monitor and log performance metrics
+
+## Security
+
+- Never log sensitive data (passwords, tokens)
+- Use bcrypt for password hashing
+- Validate all inputs
+- Implement proper authentication middleware
+- Use HTTPS in production
+- Sanitize user inputs
+

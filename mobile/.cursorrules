@@ -1,0 +1,107 @@
+# Flutter Mobile Container App Rules
+
+## Language & Version
+- Use Flutter 3.13 or later
+- Use Dart 3.0 or later
+- Follow Flutter/Dart best practices and conventions
+- Use `dart format` for code formatting
+
+## Dependencies - FOSS ONLY
+
+### Allowed Packages (Examples of FOSS Flutter packages):
+- **State Management**: `flutter_riverpod` (MIT), `provider` (MIT)
+- **Database**: `drift` (MIT) - SQLite ORM
+- **HTTP Client**: `dio` (MIT), `http` (BSD 3-Clause)
+- **QR Code**: `mobile_scanner` (MIT), `qr_code_scanner` (MIT)
+- **Remote Widgets**: `flutter_remote_widgets` (if FOSS, verify license)
+- **Compression**: `archive` (Apache 2.0)
+- **JSON**: `json_serializable` (BSD 3-Clause)
+- **Logging**: `logger` (MIT)
+- **Connectivity**: `connectivity_plus` (Apache 2.0)
+- **Permissions**: `permission_handler` (MIT)
+- **Crypto**: `crypto` (BSD 3-Clause)
+
+### Forbidden:
+- Any package requiring a license key or subscription
+- Proprietary or commercial-only packages
+- Packages with restrictive licenses (GPL, AGPL, etc.)
+- Packages that depend on third-party SaaS services
+- Firebase packages (use self-hosted alternatives)
+- Google Play Services dependencies (unless absolutely necessary and FOSS)
+
+## Project Structure
+
+```
+lib/
+  core/              # Core functionality
+    api/            # API client
+    database/       # Drift database setup
+    sync/           # Sync service
+    enrollment/     # Enrollment service
+  features/          # Feature modules
+    auth/          # Authentication
+    enrollment/    # QR code enrollment
+    messaging/     # Messaging UI
+  shared/            # Shared utilities
+    widgets/       # Reusable widgets
+    utils/         # Utility functions
+test/               # Tests
+android/            # Android-specific code
+ios/                # iOS-specific code
+web/                # Web-specific code (if needed)
+```
+
+## Code Guidelines
+
+- Use Riverpod for state management
+- Implement offline-first architecture
+- Use Drift for local SQLite database
+- Cache remote widgets locally
+- Implement proper error handling
+- Use structured logging
+- Write unit and widget tests
+- Support both Android and iOS
+- Handle permissions gracefully
+
+## Offline-First Design
+
+- All data operations should work offline
+- Queue sync operations when offline
+- Show clear offline/online status to users
+- Implement retry logic with exponential backoff
+- Cache remote widgets for offline use
+- Use local SQLite as primary data source
+
+## Container App Architecture
+
+- Request all necessary permissions at startup
+- Implement QR code scanner for enrollment
+- Load remote widgets dynamically
+- Provide shared services (sync, database, API)
+- Support multiple tenants (one at a time per device)
+
+## Performance
+
+- Minimize battery usage
+- Use efficient data structures
+- Implement lazy loading
+- Cache frequently accessed data
+- Optimize image loading
+- Use compression for network requests
+
+## Security
+
+- Store sensitive data securely (use flutter_secure_storage if needed - verify FOSS)
+- Validate all inputs
+- Use HTTPS for all API calls
+- Implement certificate pinning if needed (FOSS solution)
+- Never log sensitive data
+
+## Testing
+
+- Write unit tests for business logic
+- Write widget tests for UI components
+- Test offline scenarios
+- Test sync operations
+- Test enrollment flow
+

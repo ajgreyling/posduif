@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: posduif-postgres
+    environment:
+      POSTGRES_USER: posduif
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: tenant_1
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../config/database-init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U posduif"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: posduif-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sync-engine:
+    build:
+      context: ../sync-engine
+      dockerfile: Dockerfile
+    container_name: posduif-sync-engine
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: posduif
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: tenant_1
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SSE_PORT: 8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../config:/app/config
+    command: ["./sync-engine", "--config=/app/config/config.yaml"]
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: posduif-network
+

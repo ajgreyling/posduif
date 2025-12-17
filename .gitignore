@@ -1,0 +1,72 @@
+# General
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.iml
+
+# Go
+sync-engine/*.exe
+sync-engine/*.exe~
+sync-engine/*.dll
+sync-engine/*.so
+sync-engine/*.dylib
+sync-engine/sync-engine
+sync-engine/.vscode/
+sync-engine/.idea/
+
+# Flutter
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/.pub-cache/
+mobile/.pub/
+mobile/build/
+mobile/.ios/
+mobile/.android/
+mobile/.idea/
+mobile/.vscode/
+mobile/*.iml
+mobile/*.lock
+
+web/.dart_tool/
+web/.flutter-plugins
+web/.flutter-plugins-dependencies
+web/.packages
+web/.pub-cache/
+web/.pub/
+web/build/
+web/.idea/
+web/.vscode/
+web/*.iml
+web/*.lock
+
+# Environment and secrets
+.env
+.env.local
+*.key
+*.pem
+*.crt
+config/config.local.yaml
+config/*.secret.yaml
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS
+Thumbs.db
+

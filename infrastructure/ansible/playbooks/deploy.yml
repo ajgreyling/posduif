@@ -1,0 +1,55 @@
+---
+- name: Deploy Posduif Sync Engine
+  hosts: sync_engine
+  become: yes
+  vars:
+    app_user: posduif
+    app_dir: /opt/posduif
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+
+    - name: Install Docker Compose
+      pip:
+        name: docker-compose
+        state: present
+
+    - name: Create app directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+
+    - name: Copy application files
+      copy:
+        src: "{{ item }}"
+        dest: "{{ app_dir }}/"
+      loop:
+        - sync-engine
+        - config
+
+    - name: Start Docker Compose services
+      docker_compose:
+        project_src: "{{ app_dir }}"
+        files:
+          - docker-compose.yml
+        state: present
+
+    - name: Ensure services are running
+      systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - docker
+        - postgresql
+        - redis
+

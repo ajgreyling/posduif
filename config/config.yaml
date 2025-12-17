@@ -1,0 +1,92 @@
+# Posduif Sync Engine Configuration
+
+# PostgreSQL Database Configuration
+postgres:
+  host: localhost
+  port: 5432
+  user: posduif
+  password: secret
+  db: tenant_1
+  max_connections: 25
+  ssl_mode: disable  # Use 'require' or 'verify-full' for production
+  connect_timeout: 10s
+
+# Redis Configuration
+redis:
+  host: localhost
+  port: 6379
+  password: ""  # Set password for production
+  db: 0
+  max_retries: 3
+  pool_size: 10
+  streams:
+    enabled: true
+    max_length: 10000  # Maximum stream length before trimming
+
+# Server-Sent Events (SSE) Configuration
+sse:
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 10s
+  ping_interval: 15s  # Send ping to keep connection alive
+  max_connections: 1000
+
+# Synchronization Configuration
+sync:
+  batch_size: 100  # Number of messages to sync per batch
+  compression: true  # Enable gzip compression
+  compression_threshold: 1024  # Compress if payload > 1KB
+  conflict_resolution: "last_write_wins"  # Options: "last_write_wins", "manual"
+  retry_attempts: 3
+  retry_backoff: 2s  # Exponential backoff base
+
+# Authentication Configuration
+auth:
+  jwt_secret: "change-this-secret-key-in-production"  # MUST be changed in production
+  jwt_expiration: 3600  # Token expiration in seconds (1 hour)
+  password_min_length: 8
+  bcrypt_cost: 10
+
+# Logging Configuration
+logging:
+  level: "info"  # Options: "debug", "info", "warn", "error"
+  format: "json"  # Options: "json", "text"
+  output: "stdout"  # Options: "stdout", "file"
+  file_path: "/var/log/posduif/sync-engine.log"  # If output is "file"
+
+# Metrics Configuration
+metrics:
+  enabled: true
+  port: 9090  # Metrics endpoint port
+  path: "/metrics"  # Metrics endpoint path
+
+# CORS Configuration
+cors:
+  enabled: true
+  allowed_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+  allowed_methods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "OPTIONS"
+  allowed_headers:
+    - "Content-Type"
+    - "Authorization"
+    - "X-Device-ID"
+  max_age: 3600
+
+# Rate Limiting Configuration
+rate_limit:
+  enabled: true
+  requests_per_minute: 60
+  burst_size: 10
+
+# Health Check Configuration
+health:
+  enabled: true
+  path: "/health"
+  check_interval: 30s
+

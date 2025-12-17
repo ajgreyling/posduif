@@ -1,0 +1,48 @@
+name: posduif_web
+description: Posduif web application for Flutter
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.13.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.4.9
+
+  # HTTP Client
+  dio: ^5.4.0
+
+  # Server-Sent Events
+  sse: ^4.1.0
+
+  # QR Code Generation
+  qr_flutter: ^4.1.0
+
+  # Routing
+  go_router: ^13.0.0
+
+  # JSON Serialization
+  json_annotation: ^4.8.1
+
+  # Utilities
+  uuid: ^4.2.1
+  intl: ^0.19.0
+  shared_preferences: ^2.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+  # Code Generation
+  build_runner: ^2.4.7
+  json_serializable: ^6.7.1
+
+flutter:
+  uses-material-design: true
+

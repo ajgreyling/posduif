@@ -1,0 +1,44 @@
+# Posduif Project Rules
+
+## General Principles
+
+- **FOSS Only**: Only use open-source libraries with permissive licenses (MIT, Apache 2.0, BSD)
+- **No Proprietary Dependencies**: Avoid any libraries that require licenses, subscriptions, or have restrictive terms
+- **Self-Hosted**: All components must be self-hostable without third-party SaaS dependencies
+- **Offline-First**: Design for offline functionality with graceful degradation
+- **Multi-Tenant**: All code must support schema-per-tenant isolation
+
+## Technology Stack
+
+- **Backend**: Go 1.21+ (FOSS libraries only)
+- **Mobile**: Flutter 3.13+ with Dart (FOSS packages only)
+- **Web**: Flutter Web (FOSS packages only)
+- **Database**: PostgreSQL 16+ (schema-per-tenant)
+- **Cache/Messaging**: Redis (disk-backed Streams)
+- **Real-time**: Server-Sent Events (SSE)
+
+## Code Quality
+
+- Follow language-specific best practices and conventions
+- Write comprehensive tests
+- Document public APIs
+- Use structured logging
+- Implement proper error handling
+- Support graceful shutdown
+
+## Security
+
+- Never hardcode secrets or credentials
+- Use environment variables or config files (excluded from version control)
+- Implement proper authentication and authorization
+- Validate all inputs
+- Use prepared statements for database queries
+
+## Performance
+
+- Optimize for low latency
+- Implement connection pooling
+- Use compression for large payloads
+- Support horizontal scaling
+- Monitor resource usage
+

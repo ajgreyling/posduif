@@ -1,0 +1,54 @@
+---
+- name: Setup Posduif Infrastructure
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Update system packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Install required packages
+      apt:
+        name:
+          - curl
+          - wget
+          - git
+          - build-essential
+          - software-properties-common
+        state: present
+
+    - name: Install PostgreSQL
+      apt:
+        name: postgresql-16
+        state: present
+
+    - name: Install Redis
+      apt:
+        name: redis-server
+        state: present
+
+    - name: Install Go
+      unarchive:
+        src: https://go.dev/dl/go1.21.5.linux-amd64.tar.gz
+        dest: /usr/local
+        remote_src: yes
+
+    - name: Set up Go environment
+      lineinfile:
+        path: /etc/profile
+        line: "export PATH=$PATH:/usr/local/go/bin"
+
+    - name: Start and enable PostgreSQL
+      systemd:
+        name: postgresql
+        state: started
+        enabled: yes
+
+    - name: Start and enable Redis
+      systemd:
+        name: redis-server
+        state: started
+        enabled: yes
+
