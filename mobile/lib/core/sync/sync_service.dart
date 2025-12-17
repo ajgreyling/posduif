@@ -10,6 +10,11 @@ class SyncService {
   SyncService(this._database, this._apiClient, this._connectivity);
 
   Future<void> performSync() async {
+    // Check if API client is configured (enrolled)
+    if (!_apiClient.isConfigured) {
+      return; // No sync if not enrolled
+    }
+
     // Check connectivity
     final connectivityResult = await _connectivity.checkConnectivity();
     if (connectivityResult == ConnectivityResult.none) {
