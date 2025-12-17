@@ -49,6 +49,8 @@ class APIClient {
     });
   }
 
+  String? get token => _token;
+
   // Authentication
   Future<Map<String, dynamic>> login(String username, String password) async {
     final response = await _dio.post(

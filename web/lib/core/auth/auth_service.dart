@@ -1,11 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
 
-// Extension to access private token
-extension APIClientExtension on APIClient {
-  String? get token => _token;
-}
-
 class AuthService {
   final APIClient apiClient;
   Map<String, dynamic>? _currentUser;

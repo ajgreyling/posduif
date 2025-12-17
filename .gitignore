@@ -69,4 +69,4 @@ temp/
 
 # OS
 Thumbs.db
-
+/mobile/android/.gradle/
