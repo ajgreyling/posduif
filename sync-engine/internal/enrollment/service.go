@@ -79,26 +79,9 @@ func (s *Service) CompleteEnrollment(ctx context.Context, req *models.CompleteEn
 	}
 
 	// Complete enrollment (creates user and marks token as used)
-	if err := s.db.CompleteEnrollment(ctx, req.Token, req.DeviceID); err != nil {
-		return nil, fmt.Errorf("failed to complete enrollment: %w", err)
-	}
-
-	// Get created user
-	users, err := s.db.GetUsers(ctx, models.UserFilter{})
+	userID, err := s.db.CompleteEnrollment(ctx, req.Token, req.DeviceID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user: %w", err)
-	}
-
-	var userID string
-	for _, user := range users {
-		if user.DeviceID != nil && *user.DeviceID == req.DeviceID {
-			userID = user.ID
-			break
-		}
-	}
-
-	if userID == "" {
-		return nil, fmt.Errorf("failed to find created user")
+		return nil, fmt.Errorf("failed to complete enrollment: %w", err)
 	}
 
 	appInstructionsURL := fmt.Sprintf("http://localhost:%d/api/app-instructions", s.config.SSE.Port)

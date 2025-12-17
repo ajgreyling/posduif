@@ -44,8 +44,8 @@ class RemoteWidgetLoader {
     }
   }
 
-  Future<Map<String, dynamic>> getAppInstructions() async {
-    debugPrint('[WIDGET_LOADER] getAppInstructions called');
+  Future<Map<String, dynamic>> getAppInstructions({int retryCount = 0}) async {
+    debugPrint('[WIDGET_LOADER] getAppInstructions called (attempt ${retryCount + 1})');
     _ensureEnrolled();
     
     final apiBaseUrl = _prefs.getString('api_base_url');
@@ -62,17 +62,62 @@ class RemoteWidgetLoader {
     }
     debugPrint('[WIDGET_LOADER] Device ID: $deviceId');
 
-    final url = '$apiBaseUrl/api/app-instructions';
-    debugPrint('[WIDGET_LOADER] Making GET request to: $url');
+    // Use relative path since Dio already has baseUrl set
+    final url = '/api/app-instructions';
+    debugPrint('[WIDGET_LOADER] Making GET request to: $url (baseUrl: ${_dio.options.baseUrl})');
     try {
       final response = await _dio.get(
         url,
         options: Options(
           headers: {'X-Device-ID': deviceId},
+          validateStatus: (status) => status! < 500, // Don't throw on 4xx, handle manually
         ),
       );
+      
+      // Check for 404 specifically
+      if (response.statusCode == 404) {
+        debugPrint('[WIDGET_LOADER] Received 404 - Device may not be enrolled');
+        // Clear enrollment data if we get 404
+        await _prefs.remove('device_id');
+        await _prefs.remove('api_base_url');
+        await _prefs.remove('tenant_id');
+        await _prefs.remove('user_id');
+        await _prefs.remove('app_instructions');
+        throw Exception('Device not enrolled. Please complete enrollment.');
+      }
+      
+      if (response.statusCode != 200) {
+        debugPrint('[WIDGET_LOADER] Unexpected status code: ${response.statusCode}');
+        throw Exception('Failed to get app instructions: HTTP ${response.statusCode}');
+      }
+      
       debugPrint('[WIDGET_LOADER] App instructions retrieved successfully');
       return response.data;
+    } on DioException catch (e) {
+      debugPrint('[WIDGET_LOADER] DioException getting app instructions: $e');
+      debugPrint('[WIDGET_LOADER] Error type: ${e.type}, Response: ${e.response?.statusCode}');
+      
+      // Handle 404 specifically
+      if (e.response?.statusCode == 404) {
+        debugPrint('[WIDGET_LOADER] 404 error - clearing enrollment data');
+        await _prefs.remove('device_id');
+        await _prefs.remove('api_base_url');
+        await _prefs.remove('tenant_id');
+        await _prefs.remove('user_id');
+        await _prefs.remove('app_instructions');
+        throw Exception('Device not enrolled. Please complete enrollment.');
+      }
+      
+      // Retry logic for transient failures
+      if (retryCount < 2 && (e.type == DioExceptionType.connectionTimeout || 
+                              e.type == DioExceptionType.receiveTimeout ||
+                              e.type == DioExceptionType.connectionError)) {
+        debugPrint('[WIDGET_LOADER] Retrying after transient error (attempt ${retryCount + 1}/3)');
+        await Future.delayed(Duration(seconds: (retryCount + 1) * 2));
+        return getAppInstructions(retryCount: retryCount + 1);
+      }
+      
+      rethrow;
     } catch (e) {
       debugPrint('[WIDGET_LOADER] Error getting app instructions: $e');
       rethrow;
@@ -188,17 +233,34 @@ class RemoteWidgetLoader {
     } catch (e, stackTrace) {
       debugPrint('[WIDGET_LOADER] ERROR in loadAndRenderWidget: $e');
       debugPrint('[WIDGET_LOADER] Stack trace: $stackTrace');
+      
+      // Check if this is an enrollment error - rethrow so HomeScreen can redirect
+      final errorMessage = e.toString();
+      if (errorMessage.contains('not enrolled') || 
+          errorMessage.contains('Device not enrolled') ||
+          errorMessage.contains('Please complete enrollment')) {
+        debugPrint('[WIDGET_LOADER] Enrollment error detected - rethrowing for redirect handling');
+        // Rethrow enrollment errors so HomeScreen can catch and redirect to scanner
+        rethrow;
+      }
+      
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
-            const SizedBox(height: 16),
-            Text(
-              'Error loading widget: $e',
-              textAlign: TextAlign.center,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                const SizedBox(height: 16),
+                Text(
+                  'Error loading widget: $e',
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       );
     }

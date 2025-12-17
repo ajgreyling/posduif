@@ -37,7 +37,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final response = await authService.login(username, password);
       state = AuthState.authenticated(response['user']);
     } catch (e) {
-      state = AuthState.error(e.toString());
+      // Extract error message from DioException if present
+      String errorMessage = 'Login failed';
+      
+      if (e.toString().contains('DioException')) {
+        // Try to extract error message from response
+        if (e.toString().contains('Invalid credentials') || 
+            e.toString().contains('401')) {
+          errorMessage = 'Invalid username or password';
+        } else if (e.toString().contains('connection') || 
+                   e.toString().contains('Connection refused') ||
+                   e.toString().contains('Failed host lookup')) {
+          errorMessage = 'Connection error. Please check if the server is running.';
+        } else {
+          // Try to get a more specific error message
+          errorMessage = e.toString();
+        }
+      } else {
+        errorMessage = e.toString();
+      }
+      
+      state = AuthState.error(errorMessage);
     }
   }
 

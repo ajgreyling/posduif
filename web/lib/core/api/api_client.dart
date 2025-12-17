@@ -53,11 +53,16 @@ class APIClient {
 
   // Authentication
   Future<Map<String, dynamic>> login(String username, String password) async {
-    final response = await _dio.post(
-      '/api/auth/login',
-      data: {'username': username, 'password': password},
-    );
-    return response.data;
+    try {
+      final response = await _dio.post(
+        '/api/auth/login',
+        data: {'username': username, 'password': password},
+      );
+      return response.data;
+    } catch (e) {
+      // Re-throw with more context if needed
+      rethrow;
+    }
   }
 
   // Users

@@ -35,24 +35,59 @@ else
     echo -e "${GREEN}✓ Docker Compose services are running${NC}"
 fi
 
-# Check if sync engine is running
+# Check if sync engine is running and kill any old instances
 echo -e "${YELLOW}Checking sync engine...${NC}"
-if curl -s http://localhost:8080/health > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ Sync engine is running${NC}"
-else
-    echo -e "${YELLOW}Starting sync engine...${NC}"
-    cd "$PROJECT_ROOT/sync-engine"
-    go run ./cmd/sync-engine/main.go --config=../config/config.yaml > /tmp/sync-engine.log 2>&1 &
-    SYNC_ENGINE_PID=$!
-    echo "Waiting for sync engine to start..."
-    sleep 5
-    
-    if curl -s http://localhost:8080/health > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ Sync engine started (PID: $SYNC_ENGINE_PID)${NC}"
-    else
-        echo -e "${RED}✗ Failed to start sync engine${NC}"
-        exit 1
+
+# Kill any existing sync-engine processes
+KILLED_PROCESSES=false
+if pgrep -f "sync-engine" > /dev/null 2>&1 || pgrep -f "/tmp/sync-engine" > /dev/null 2>&1; then
+    echo -e "${YELLOW}Stopping existing sync engine processes...${NC}"
+    pkill -f "sync-engine" 2>/dev/null || true
+    pkill -f "/tmp/sync-engine" 2>/dev/null || true
+    KILLED_PROCESSES=true
+    sleep 2
+fi
+
+# Kill any process using port 8080
+if lsof -ti:8080 > /dev/null 2>&1; then
+    if [ "$KILLED_PROCESSES" = false ]; then
+        echo -e "${YELLOW}Stopping process on port 8080...${NC}"
     fi
+    lsof -ti:8080 | xargs kill -9 2>/dev/null || true
+    sleep 2
+fi
+
+# Check if sync engine is still running after cleanup
+if curl -s http://localhost:8080/health > /dev/null 2>&1; then
+    echo -e "${YELLOW}⚠ Sync engine still responding after cleanup attempt${NC}"
+    echo -e "${YELLOW}  Manually stop it and run this script again${NC}"
+    exit 1
+fi
+
+# Always rebuild to ensure latest code
+echo -e "${YELLOW}Building sync engine...${NC}"
+cd "$PROJECT_ROOT/sync-engine"
+
+# Build the sync engine binary
+if go build -o /tmp/sync-engine ./cmd/sync-engine/main.go; then
+    echo -e "${GREEN}✓ Sync engine built successfully${NC}"
+else
+    echo -e "${RED}✗ Failed to build sync engine${NC}"
+    exit 1
+fi
+
+echo -e "${YELLOW}Starting sync engine...${NC}"
+/tmp/sync-engine --config="$PROJECT_ROOT/config/config.yaml" > /tmp/sync-engine.log 2>&1 &
+SYNC_ENGINE_PID=$!
+echo "Waiting for sync engine to start..."
+sleep 5
+
+if curl -s http://localhost:8080/health > /dev/null 2>&1; then
+    echo -e "${GREEN}✓ Sync engine started (PID: $SYNC_ENGINE_PID)${NC}"
+else
+    echo -e "${RED}✗ Failed to start sync engine${NC}"
+    echo -e "${YELLOW}  Check logs: tail -f /tmp/sync-engine.log${NC}"
+    exit 1
 fi
 
 # Check for ngrok
@@ -221,7 +256,12 @@ echo ""
 echo -e "${GREEN}=== Setup Complete ===${NC}"
 echo ""
 echo "To stop services:"
-echo "  - Sync engine: kill $SYNC_ENGINE_PID (if started)"
-echo "  - ngrok: kill $NGROK_PID (if started)"
+if [ -n "$SYNC_ENGINE_PID" ]; then
+    echo "  - Sync engine: kill $SYNC_ENGINE_PID"
+fi
+if [ -n "$NGROK_PID" ]; then
+    echo "  - ngrok: kill $NGROK_PID"
+fi
 echo "  - Docker Compose: cd infrastructure && docker-compose down"
+echo "  - Cleanup binary: rm -f /tmp/sync-engine"
 

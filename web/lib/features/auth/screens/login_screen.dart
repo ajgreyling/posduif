@@ -23,22 +23,43 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
-    if (_formKey.currentState!.validate()) {
-      final authNotifier = ref.read(authStateProvider.notifier);
-      await authNotifier.login(
-        _usernameController.text,
-        _passwordController.text,
-      );
+    print('[LOGIN] Login button clicked');
+    
+    if (!_formKey.currentState!.validate()) {
+      print('[LOGIN] Form validation failed');
+      return;
+    }
+    
+    print('[LOGIN] Calling login with username: ${_usernameController.text.trim()}');
+    
+    final authNotifier = ref.read(authStateProvider.notifier);
+    await authNotifier.login(
+      _usernameController.text.trim(),
+      _passwordController.text,
+    );
 
-      if (mounted) {
-        final authState = ref.read(authStateProvider);
-        if (authState.isAuthenticated) {
-          context.go('/users');
-        } else if (authState.error != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(authState.error!)),
-          );
-        }
+    // Wait for the next frame to ensure state is updated
+    if (mounted) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      final authState = ref.read(authStateProvider);
+      print('[LOGIN] Login result - authenticated: ${authState.isAuthenticated}, error: ${authState.error}');
+      
+      if (authState.isAuthenticated) {
+        print('[LOGIN] Navigating to /users');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            context.go('/users');
+          }
+        });
+      } else if (authState.error != null) {
+        print('[LOGIN] Showing error snackbar: ${authState.error}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(authState.error!),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            duration: const Duration(seconds: 5),
+          ),
+        );
       }
     }
   }
@@ -46,6 +67,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    
+    // Listen for auth state changes and navigate when authenticated
+    ref.listen<AuthState>(authStateProvider, (previous, next) {
+      if (next.isAuthenticated && (previous == null || !previous.isAuthenticated)) {
+        print('[LOGIN] Auth state changed to authenticated, navigating to /users');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && context.mounted) {
+            context.go('/users');
+          }
+        });
+      }
+    });
 
     return Scaffold(
       body: Center(
@@ -85,6 +118,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         border: OutlineInputBorder(),
                       ),
                       obscureText: true,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _handleLogin(),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter password';

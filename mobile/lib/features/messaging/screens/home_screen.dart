@@ -94,23 +94,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       debugPrint('[HOME] Error in _checkEnrollmentAndLoadWidgets: $e');
       debugPrint('[HOME] Stack trace: $stackTrace');
       
-      if (mounted) {
-        // If error loading widgets, check if it's an enrollment issue
+      if (!mounted) return;
+      
+      // Check if this is an enrollment-related error
+      final errorMessage = e.toString().toLowerCase();
+      final isEnrollmentError = errorMessage.contains('not enrolled') ||
+          errorMessage.contains('device not enrolled') ||
+          errorMessage.contains('please complete enrollment') ||
+          errorMessage.contains('please re-enroll') ||
+          (errorMessage.contains('404') && errorMessage.contains('app-instructions'));
+      
+      if (isEnrollmentError) {
+        debugPrint('[HOME] Enrollment error detected - clearing enrollment data and redirecting to scanner');
         final prefs = await SharedPreferences.getInstance();
-        final deviceId = prefs.getString('device_id');
-        final apiBaseUrl = prefs.getString('api_base_url');
+        await prefs.remove('device_id');
+        await prefs.remove('api_base_url');
+        await prefs.remove('tenant_id');
+        await prefs.remove('user_id');
+        await prefs.remove('app_instructions');
+        await prefs.remove('app_instructions_url');
         
-        debugPrint('[HOME] Error handler - device_id: ${deviceId ?? "null"}');
-        debugPrint('[HOME] Error handler - api_base_url: ${apiBaseUrl ?? "null"}');
-        
-        if (deviceId == null || apiBaseUrl == null) {
-          debugPrint('[HOME] Not enrolled after error - redirecting to scanner');
-          // Not enrolled - redirect to scanner
+        // Redirect to scanner immediately
+        if (mounted) {
           context.go('/scanner');
-          return;
         }
-        
-        debugPrint('[HOME] Setting error state: $e');
+        return;
+      }
+      
+      // If error loading widgets, check if it's an enrollment issue
+      final prefs = await SharedPreferences.getInstance();
+      final deviceId = prefs.getString('device_id');
+      final apiBaseUrl = prefs.getString('api_base_url');
+      
+      debugPrint('[HOME] Error handler - device_id: ${deviceId ?? "null"}');
+      debugPrint('[HOME] Error handler - api_base_url: ${apiBaseUrl ?? "null"}');
+      
+      if (deviceId == null || apiBaseUrl == null) {
+        debugPrint('[HOME] Not enrolled after error - redirecting to scanner');
+        // Not enrolled - redirect to scanner
+        if (mounted) {
+          context.go('/scanner');
+        }
+        return;
+      }
+      
+      debugPrint('[HOME] Setting error state: $e');
+      if (mounted) {
         setState(() {
           _error = e.toString();
           _isLoading = false;

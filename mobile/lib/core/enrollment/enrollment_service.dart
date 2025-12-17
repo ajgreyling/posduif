@@ -77,10 +77,26 @@ class EnrollmentService {
       );
       
       debugPrint('[ENROLLMENT] App instructions retrieved successfully');
+      debugPrint('[ENROLLMENT] Response status: ${response.statusCode}');
       debugPrint('[ENROLLMENT] Response api_base_url: ${response.data['api_base_url']}');
+      debugPrint('[ENROLLMENT] Response widgets: ${response.data['widgets']?.keys}');
       
-      // Store app instructions
-      await _prefs.setString('app_instructions', response.data.toString());
+      // Store app instructions as JSON string
+      final instructionsJson = response.data.toString();
+      await _prefs.setString('app_instructions', instructionsJson);
+      debugPrint('[ENROLLMENT] Stored app instructions');
+      
+      // Store app_instructions_url if provided in response
+      if (response.data['app_instructions_url'] != null) {
+        final appInstructionsUrl = response.data['app_instructions_url'] as String;
+        // Only save if it's not localhost
+        if (!appInstructionsUrl.contains('localhost') && !appInstructionsUrl.contains('127.0.0.1')) {
+          await _prefs.setString('app_instructions_url', appInstructionsUrl);
+          debugPrint('[ENROLLMENT] Stored app_instructions_url: $appInstructionsUrl');
+        } else {
+          debugPrint('[ENROLLMENT] Skipped storing app_instructions_url (contains localhost)');
+        }
+      }
       
       // Don't overwrite api_base_url if it's already set - the one from QR code is correct
       // The backend returns localhost which won't work from mobile device
@@ -90,15 +106,26 @@ class EnrollmentService {
       debugPrint('[ENROLLMENT] Backend returned api_base_url: ${response.data['api_base_url']}');
       if (currentApiBaseUrl == null) {
         // Only set if not already set (shouldn't happen, but be safe)
-        await _prefs.setString('api_base_url', response.data['api_base_url']);
-        debugPrint('[ENROLLMENT] Set api_base_url from backend response');
+        final backendUrl = response.data['api_base_url'] as String;
+        // Only save if it's not localhost
+        if (!backendUrl.contains('localhost') && !backendUrl.contains('127.0.0.1')) {
+          await _prefs.setString('api_base_url', backendUrl);
+          debugPrint('[ENROLLMENT] Set api_base_url from backend response: $backendUrl');
+        } else {
+          debugPrint('[ENROLLMENT] Skipped setting api_base_url (backend returned localhost)');
+        }
       } else {
-        debugPrint('[ENROLLMENT] Keeping existing api_base_url (not overwriting with localhost)');
+        debugPrint('[ENROLLMENT] Keeping existing api_base_url (not overwriting)');
       }
       
       return response.data;
     } catch (e) {
       debugPrint('[ENROLLMENT] Error getting app instructions: $e');
+      if (e is DioException) {
+        debugPrint('[ENROLLMENT] DioException type: ${e.type}');
+        debugPrint('[ENROLLMENT] DioException response: ${e.response?.statusCode}');
+        debugPrint('[ENROLLMENT] DioException message: ${e.message}');
+      }
       rethrow;
     }
   }

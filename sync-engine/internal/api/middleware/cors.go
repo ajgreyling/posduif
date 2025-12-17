@@ -21,6 +21,10 @@ func NewCORSMiddleware(allowedOrigins, allowedMethods, allowedHeaders []string) 
 func (m *CORSMiddleware) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
+		
+		// Check if this is an ngrok request
+		ngrokForwardedHost := r.Header.Get("X-Forwarded-Host")
+		isNgrokRequest := ngrokForwardedHost != ""
 
 		// Check if origin is allowed
 		allowed := false
@@ -31,11 +35,21 @@ func (m *CORSMiddleware) Middleware(next http.Handler) http.Handler {
 			}
 		}
 
-		// Always set CORS headers
-		if allowed && origin != "" {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		} else if len(m.allowedOrigins) > 0 && m.allowedOrigins[0] == "*" {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
+		// For ngrok requests, be more permissive with CORS
+		if isNgrokRequest {
+			// Allow ngrok origins
+			if origin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			} else {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+			}
+		} else {
+			// Standard CORS handling
+			if allowed && origin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			} else if len(m.allowedOrigins) > 0 && m.allowedOrigins[0] == "*" {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+			}
 		}
 
 		w.Header().Set("Access-Control-Allow-Methods", joinStrings(m.allowedMethods, ", "))

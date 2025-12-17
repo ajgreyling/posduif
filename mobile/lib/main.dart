@@ -115,8 +115,20 @@ class PosduifMobileApp extends StatelessWidget {
         await prefs.remove('tenant_id');
         await prefs.remove('user_id');
         await prefs.remove('app_instructions');
+        await prefs.remove('app_instructions_url');
         debugPrint('[MAIN] Enrollment status: false (localhost detected and cleared)');
         return false;
+      }
+      
+      // Verify app_instructions_url is saved (optional but helpful)
+      final appInstructionsUrl = prefs.getString('app_instructions_url');
+      if (appInstructionsUrl != null) {
+        debugPrint('[MAIN] Found app_instructions_url: $appInstructionsUrl');
+        // Validate it's not localhost
+        if (appInstructionsUrl.contains('localhost') || appInstructionsUrl.contains('127.0.0.1')) {
+          debugPrint('[MAIN] WARNING: app_instructions_url is localhost - clearing');
+          await prefs.remove('app_instructions_url');
+        }
       }
       
       final isEnrolled = true;

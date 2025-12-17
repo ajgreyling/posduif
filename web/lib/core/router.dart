@@ -16,6 +16,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),
+        redirect: (context, state) {
+          // If already authenticated, redirect to users
+          if (authState.isAuthenticated) {
+            return '/users';
+          }
+          return null;
+        },
       ),
       GoRoute(
         path: '/users',

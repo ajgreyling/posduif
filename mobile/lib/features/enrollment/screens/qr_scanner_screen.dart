@@ -78,8 +78,34 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
 
       debugPrint('[QR_SCANNER] Getting app instructions...');
       // Get app instructions (this will update the API base URL if different)
-      await enrollmentService.getAppInstructions(deviceId);
-      debugPrint('[QR_SCANNER] App instructions retrieved');
+      try {
+        final appInstructions = await enrollmentService.getAppInstructions(deviceId);
+        debugPrint('[QR_SCANNER] App instructions retrieved successfully');
+        debugPrint('[QR_SCANNER] App instructions version: ${appInstructions['version']}');
+        debugPrint('[QR_SCANNER] App instructions tenant_id: ${appInstructions['tenant_id']}');
+        debugPrint('[QR_SCANNER] App instructions widgets: ${appInstructions['widgets']?.keys}');
+        
+        // Verify app instructions URL is saved
+        final savedInstructionsUrl = prefs.getString('app_instructions_url');
+        debugPrint('[QR_SCANNER] Saved app_instructions_url: $savedInstructionsUrl');
+        
+        // Verify api_base_url is saved and not localhost
+        final savedApiBaseUrl = prefs.getString('api_base_url');
+        if (savedApiBaseUrl == null || savedApiBaseUrl.contains('localhost') || savedApiBaseUrl.contains('127.0.0.1')) {
+          debugPrint('[QR_SCANNER] ERROR: api_base_url is invalid after enrollment');
+          throw Exception('Invalid API base URL after enrollment. Please try again.');
+        }
+        debugPrint('[QR_SCANNER] Verified api_base_url: $savedApiBaseUrl');
+      } catch (e) {
+        debugPrint('[QR_SCANNER] ERROR getting app instructions: $e');
+        // Clear partial enrollment data
+        await prefs.remove('device_id');
+        await prefs.remove('api_base_url');
+        await prefs.remove('tenant_id');
+        await prefs.remove('user_id');
+        await prefs.remove('app_instructions');
+        throw Exception('Failed to get app instructions: $e');
+      }
 
       debugPrint('[QR_SCANNER] Navigating to home screen...');
       if (mounted) {

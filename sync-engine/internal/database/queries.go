@@ -2,10 +2,12 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"posduif/sync-engine/internal/models"
 )
 
@@ -256,48 +258,80 @@ func (db *DB) GetEnrollmentToken(ctx context.Context, token string) (*models.Enr
 	return &et, nil
 }
 
-func (db *DB) CompleteEnrollment(ctx context.Context, token, deviceID string) error {
-	tx, err := db.Pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
+func (db *DB) CompleteEnrollment(ctx context.Context, token, deviceID string) (string, error) {
+		tx, err := db.Pool.Begin(ctx)
+		if err != nil {
+			return "", err
+		}
+		defer tx.Rollback(ctx)
 
 	// Update enrollment token
 	updateQuery := `UPDATE enrollment_tokens 
 	                SET used_at = NOW(), device_id = $1, updated_at = NOW()
 	                WHERE token = $2 AND used_at IS NULL AND expires_at > NOW()`
-	result, err := tx.Exec(ctx, updateQuery, deviceID, token)
-	if err != nil {
-		return err
-	}
-	if result.RowsAffected() == 0 {
-		return fmt.Errorf("enrollment token not found or already used")
-	}
+		result, err := tx.Exec(ctx, updateQuery, deviceID, token)
+		if err != nil {
+			return "", err
+		}
+		if result.RowsAffected() == 0 {
+			return "", fmt.Errorf("enrollment token not found or already used")
+		}
 
 	// Get token details
 	var et models.EnrollmentToken
 	getQuery := `SELECT id, created_by, tenant_id FROM enrollment_tokens WHERE token = $1`
-	err = tx.QueryRow(ctx, getQuery, token).Scan(&et.ID, &et.CreatedBy, &et.TenantID)
-	if err != nil {
-		return err
-	}
+		err = tx.QueryRow(ctx, getQuery, token).Scan(&et.ID, &et.CreatedBy, &et.TenantID)
+		if err != nil {
+			return "", err
+		}
 
-	// Create mobile user
-	userID := uuid.New().String()
-	username := fmt.Sprintf("mobile_user_%s", deviceID[:8])
+	// Check if user with this device_id already exists
+	var userID string
+	var existingUserID string
+	checkQuery := `SELECT id FROM users WHERE device_id = $1`
+	err = tx.QueryRow(ctx, checkQuery, deviceID).Scan(&existingUserID)
+	
 	now := time.Now()
-	insertQuery := `INSERT INTO users (id, username, user_type, device_id, 
-	                  enrolled_at, enrollment_token_id, created_at, updated_at)
-	                  VALUES ($1, $2, 'mobile', $3, $4, $5, $6, $7)`
-	_, err = tx.Exec(ctx, insertQuery,
-		userID, username, deviceID, now, et.ID, now, now,
-	)
-	if err != nil {
-		return err
+	if err == nil {
+		// User already exists - update enrollment info
+		userID = existingUserID
+		updateUserQuery := `UPDATE users 
+		                   SET enrolled_at = $1, enrollment_token_id = $2, updated_at = $3
+		                   WHERE id = $4`
+		_, err = tx.Exec(ctx, updateUserQuery, now, et.ID, now, userID)
+		if err != nil {
+			return "", fmt.Errorf("failed to update existing user: %w", err)
+		}
+	} else if errors.Is(err, pgx.ErrNoRows) {
+		// User doesn't exist - create new one
+		userID = uuid.New().String()
+		username := fmt.Sprintf("mobile_user_%s", deviceID[:8])
+		// Use INSERT ... ON CONFLICT to handle username conflicts
+		insertQuery := `INSERT INTO users (id, username, user_type, device_id, 
+		                  enrolled_at, enrollment_token_id, created_at, updated_at)
+		                  VALUES ($1, $2, 'mobile', $3, $4, $5, $6, $7)
+		                  ON CONFLICT (username) DO UPDATE 
+		                  SET device_id = EXCLUDED.device_id,
+		                      enrolled_at = EXCLUDED.enrolled_at,
+		                      enrollment_token_id = EXCLUDED.enrollment_token_id,
+		                      updated_at = EXCLUDED.updated_at
+		                  RETURNING id`
+		err = tx.QueryRow(ctx, insertQuery,
+			userID, username, deviceID, now, et.ID, now, now,
+		).Scan(&userID)
+		if err != nil {
+			return "", fmt.Errorf("failed to create user: %w", err)
+		}
+	} else {
+		// Unexpected error checking for user
+		return "", fmt.Errorf("failed to check for existing user: %w", err)
 	}
 
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return userID, nil
 }
 
 // Sync Queries
