@@ -26,3 +26,15 @@ variable "key_name" {
   type        = string
 }
 
+variable "instance_type" {
+  description = "EC2 instance type for sync engine"
+  type        = string
+  default     = "t3.small"
+}
+
+variable "environment" {
+  description = "Environment name (dev, staging, prod)"
+  type        = string
+  default     = "prod"
+}
+

@@ -1,0 +1,87 @@
+---
+- name: Deploy Posduif to Production
+  hosts: sync_engine
+  become: yes
+  vars:
+    app_user: posduif
+    app_dir: /opt/posduif
+    docker_image: posduif/sync-engine:latest
+
+  tasks:
+    - name: Ensure app user exists
+      user:
+        name: "{{ app_user }}"
+        system: yes
+        shell: /bin/bash
+        create_home: yes
+
+    - name: Create app directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: '0755'
+
+    - name: Copy production docker-compose file
+      template:
+        src: docker-compose.prod.yml.j2
+        dest: "{{ app_dir }}/docker-compose.yml"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: '0644'
+
+    - name: Copy config files
+      copy:
+        src: "{{ item }}"
+        dest: "{{ app_dir }}/config/"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+      loop:
+        - "{{ playbook_dir }}/../../config/config.yaml"
+        - "{{ playbook_dir }}/../../config/database-init.sql"
+      when: item is defined
+
+    - name: Create .env file from template
+      template:
+        src: env.prod.j2
+        dest: "{{ app_dir }}/.env"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: '0600'
+
+    - name: Pull latest Docker image
+      docker_image:
+        name: "{{ docker_image }}"
+        source: pull
+      become_user: "{{ app_user }}"
+
+    - name: Stop existing containers
+      command: docker compose down
+      args:
+        chdir: "{{ app_dir }}"
+      become_user: "{{ app_user }}"
+      ignore_errors: yes
+
+    - name: Start services with docker-compose
+      command: docker compose up -d
+      args:
+        chdir: "{{ app_dir }}"
+      become_user: "{{ app_user }}"
+
+    - name: Wait for service to be healthy
+      uri:
+        url: "http://localhost:{{ sse_port | default(8080) }}/health"
+        status_code: 200
+      register: health_check
+      until: health_check.status == 200
+      retries: 10
+      delay: 5
+      ignore_errors: yes
+
+    - name: Verify service is running
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+

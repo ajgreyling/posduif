@@ -20,7 +20,8 @@ resource "aws_vpc" "posduif" {
   enable_dns_support   = true
 
   tags = {
-    Name = "posduif-vpc"
+    Name        = "posduif-vpc"
+    Environment = var.environment
   }
 }
 
@@ -78,10 +79,19 @@ resource "aws_security_group" "posduif" {
   }
 
   ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "SSH"
+  }
+
+  ingress {
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
     cidr_blocks = ["10.0.0.0/16"]
+    description = "PostgreSQL"
   }
 
   ingress {
@@ -89,6 +99,23 @@ resource "aws_security_group" "posduif" {
     to_port     = 6379
     protocol    = "tcp"
     cidr_blocks = ["10.0.0.0/16"]
+    description = "Redis"
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "HTTPS"
+  }
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "HTTP"
   }
 
   egress {
@@ -103,6 +130,27 @@ resource "aws_security_group" "posduif" {
   }
 }
 
+# Private Subnet for Database
+resource "aws_subnet" "private" {
+  vpc_id            = aws_vpc.posduif.id
+  cidr_block        = "10.0.2.0/24"
+  availability_zone = "${var.aws_region}b"
+
+  tags = {
+    Name = "posduif-private-subnet"
+  }
+}
+
+# DB Subnet Group (requires at least 2 subnets in different AZs)
+resource "aws_db_subnet_group" "posduif" {
+  name       = "posduif-db-subnet-group"
+  subnet_ids = [aws_subnet.public.id, aws_subnet.private.id]
+
+  tags = {
+    Name = "posduif-db-subnet-group"
+  }
+}
+
 # RDS PostgreSQL Instance
 resource "aws_db_instance" "posduif" {
   identifier             = "posduif-db"
@@ -110,25 +158,21 @@ resource "aws_db_instance" "posduif" {
   engine_version         = "16.0"
   instance_class         = "db.t3.micro"
   allocated_storage      = 20
+  max_allocated_storage   = 100
   storage_type           = "gp2"
+  storage_encrypted       = true
   db_name                = "posduif"
   username               = var.db_username
   password               = var.db_password
   vpc_security_group_ids = [aws_security_group.posduif.id]
   db_subnet_group_name   = aws_db_subnet_group.posduif.name
-  skip_final_snapshot    = true
+  publicly_accessible    = false
+  backup_retention_period = 7
+  skip_final_snapshot    = false
+  final_snapshot_identifier = "posduif-db-final-snapshot-${formatdate("YYYY-MM-DD-hhmm", timestamp())}"
 
   tags = {
     Name = "posduif-db"
-  }
-}
-
-resource "aws_db_subnet_group" "posduif" {
-  name       = "posduif-db-subnet-group"
-  subnet_ids = [aws_subnet.public.id]
-
-  tags = {
-    Name = "posduif-db-subnet-group"
   }
 }
 
@@ -152,20 +196,39 @@ resource "aws_elasticache_cluster" "posduif" {
 # EC2 Instance for Sync Engine
 resource "aws_instance" "sync_engine" {
   ami           = var.ami_id
-  instance_type = "t3.micro"
+  instance_type = var.instance_type
   subnet_id     = aws_subnet.public.id
   key_name      = var.key_name
 
   vpc_security_group_ids = [aws_security_group.posduif.id]
+  associate_public_ip_address = true
 
-  user_data = <<-EOF
-              #!/bin/bash
-              # Install Docker and Docker Compose
-              # Run sync engine container
-              EOF
+  user_data = base64encode(templatefile("${path.module}/user-data.sh", {
+    db_endpoint = aws_db_instance.posduif.endpoint
+    db_name     = aws_db_instance.posduif.db_name
+    db_username = var.db_username
+    db_password = var.db_password
+    redis_endpoint = aws_elasticache_cluster.posduif.cache_nodes[0].address
+  }))
+
+  root_block_device {
+    volume_type = "gp3"
+    volume_size = 20
+    encrypted   = true
+  }
 
   tags = {
     Name = "posduif-sync-engine"
+  }
+}
+
+# Elastic IP for Sync Engine
+resource "aws_eip" "sync_engine" {
+  instance = aws_instance.sync_engine.id
+  domain   = "vpc"
+
+  tags = {
+    Name = "posduif-sync-engine-eip"
   }
 }
 

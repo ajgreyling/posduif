@@ -1,0 +1,21 @@
+all:
+  children:
+    sync_engine:
+      hosts:
+        posduif-prod:
+          ansible_host: ${SYNC_ENGINE_IP}
+          ansible_user: ubuntu
+          ansible_ssh_private_key_file: ~/.ssh/posduif-prod.pem
+      vars:
+        postgres_host: ${POSTGRES_HOST}
+        postgres_port: 5432
+        postgres_user: posduif
+        postgres_password: ${POSTGRES_PASSWORD}
+        postgres_db: tenant_1
+        redis_host: ${REDIS_HOST}
+        redis_port: 6379
+        redis_password: ${REDIS_PASSWORD}
+        sse_port: 8080
+        jwt_secret: ${JWT_SECRET}
+        log_level: info
+

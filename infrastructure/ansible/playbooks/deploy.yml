@@ -35,21 +35,18 @@
       loop:
         - sync-engine
         - config
+      when: item is defined
 
     - name: Start Docker Compose services
-      docker_compose:
-        project_src: "{{ app_dir }}"
-        files:
-          - docker-compose.yml
-        state: present
+      command: docker compose up -d
+      args:
+        chdir: "{{ app_dir }}"
+      become_user: "{{ app_user }}"
+      when: ansible_facts['os_family'] != "Windows"
 
-    - name: Ensure services are running
+    - name: Ensure Docker service is running
       systemd:
-        name: "{{ item }}"
+        name: docker
         state: started
         enabled: yes
-      loop:
-        - docker
-        - postgresql
-        - redis
 

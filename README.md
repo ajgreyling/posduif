@@ -128,7 +128,7 @@ The mobile application uses a **container app** architecture with **Flutter Remo
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-org/posduif.git
+git clone https://github.com/ajgreyling/posduif.git
 cd posduif
 ```
 
