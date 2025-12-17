@@ -73,9 +73,9 @@ func main() {
 	// Set up router
 	router := mux.NewRouter()
 
-	// Apply global middleware
-	router.Use(loggingMiddleware.Middleware)
+	// Apply global middleware (CORS must be first to handle OPTIONS)
 	router.Use(corsMiddleware.Middleware)
+	router.Use(loggingMiddleware.Middleware)
 
 	// Health check endpoint
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -85,6 +85,13 @@ func main() {
 
 	// API routes
 	api := router.PathPrefix("/api").Subrouter()
+	
+	// Handle OPTIONS for all API routes - must be registered before specific routes
+	api.Methods("OPTIONS").MatcherFunc(func(r *http.Request, rm *mux.RouteMatch) bool {
+		return true
+	}).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
 
 	// Authentication (no auth required)
 	api.HandleFunc("/auth/login", authHandler.Login).Methods("POST")
@@ -119,10 +126,21 @@ func main() {
 	protected.HandleFunc("/sse/web/{user_id}", webSSEHandler.HandleSSE).Methods("GET")
 	api.HandleFunc("/sse/mobile/{device_id}", mobileSSEHandler.HandleSSE).Methods("GET")
 
+	// Wrap router to handle OPTIONS requests before routing
+	wrappedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "OPTIONS" {
+			corsMiddleware.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			})).ServeHTTP(w, r)
+			return
+		}
+		router.ServeHTTP(w, r)
+	})
+
 	// Set up HTTP server
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.SSE.Port),
-		Handler:      router,
+		Handler:      wrappedHandler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,

@@ -31,8 +31,11 @@ func (m *CORSMiddleware) Middleware(next http.Handler) http.Handler {
 			}
 		}
 
-		if allowed {
+		// Always set CORS headers
+		if allowed && origin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
+		} else if len(m.allowedOrigins) > 0 && m.allowedOrigins[0] == "*" {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 
 		w.Header().Set("Access-Control-Allow-Methods", joinStrings(m.allowedMethods, ", "))
@@ -40,6 +43,7 @@ func (m *CORSMiddleware) Middleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Max-Age", "3600")
 
+		// Handle preflight OPTIONS request
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusNoContent)
 			return
