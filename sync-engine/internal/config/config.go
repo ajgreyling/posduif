@@ -18,22 +18,22 @@ type Config struct {
 }
 
 type CORSConfig struct {
-	Enabled       bool     `yaml:"enabled"`
+	Enabled        bool     `yaml:"enabled"`
 	AllowedOrigins []string `yaml:"allowed_origins"`
 	AllowedMethods []string `yaml:"allowed_methods"`
 	AllowedHeaders []string `yaml:"allowed_headers"`
-	MaxAge        int      `yaml:"max_age"`
+	MaxAge         int      `yaml:"max_age"`
 }
 
 type PostgresConfig struct {
-	Host            string `yaml:"host"`
-	Port            int    `yaml:"port"`
-	User            string `yaml:"user"`
-	Password        string `yaml:"password"`
-	DB              string `yaml:"db"`
-	MaxConnections  int    `yaml:"max_connections"`
-	SSLMode         string `yaml:"ssl_mode"`
-	ConnectTimeout  string `yaml:"connect_timeout"`
+	Host           string `yaml:"host"`
+	Port           int    `yaml:"port"`
+	User           string `yaml:"user"`
+	Password       string `yaml:"password"`
+	DB             string `yaml:"db"`
+	MaxConnections int    `yaml:"max_connections"`
+	SSLMode        string `yaml:"ssl_mode"`
+	ConnectTimeout string `yaml:"connect_timeout"`
 }
 
 type RedisConfig struct {
@@ -45,8 +45,8 @@ type RedisConfig struct {
 }
 
 type StreamsConfig struct {
-	Enabled  bool `yaml:"enabled"`
-	MaxLength int `yaml:"max_length"`
+	Enabled   bool `yaml:"enabled"`
+	MaxLength int  `yaml:"max_length"`
 }
 
 type SSEConfig struct {
@@ -57,19 +57,19 @@ type SSEConfig struct {
 }
 
 type SyncConfig struct {
-	BatchSize          int    `yaml:"batch_size"`
-	Compression        bool   `yaml:"compression"`
-	CompressionThreshold int `yaml:"compression_threshold"`
-	ConflictResolution string `yaml:"conflict_resolution"`
-	RetryAttempts      int    `yaml:"retry_attempts"`
-	RetryBackoff       string `yaml:"retry_backoff"`
+	BatchSize            int    `yaml:"batch_size"`
+	Compression          bool   `yaml:"compression"`
+	CompressionThreshold int    `yaml:"compression_threshold"`
+	ConflictResolution   string `yaml:"conflict_resolution"`
+	RetryAttempts        int    `yaml:"retry_attempts"`
+	RetryBackoff         string `yaml:"retry_backoff"`
 }
 
 type AuthConfig struct {
-	JWTSecret        string `yaml:"jwt_secret"`
-	JWTExpiration    int    `yaml:"jwt_expiration"`
-	PasswordMinLength int   `yaml:"password_min_length"`
-	BcryptCost       int    `yaml:"bcrypt_cost"`
+	JWTSecret         string `yaml:"jwt_secret"`
+	JWTExpiration     int    `yaml:"jwt_expiration"`
+	PasswordMinLength int    `yaml:"password_min_length"`
+	BcryptCost        int    `yaml:"bcrypt_cost"`
 }
 
 type LoggingConfig struct {
@@ -120,4 +120,3 @@ func LoadConfig(path string) (*Config, error) {
 
 	return &config, nil
 }
-

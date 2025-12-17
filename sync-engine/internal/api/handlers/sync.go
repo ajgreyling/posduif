@@ -119,21 +119,20 @@ func (h *SyncHandler) GetSyncStatus(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Create default sync metadata if not exists
 		sm = &models.SyncMetadata{
-			DeviceID:            deviceID,
+			DeviceID:             deviceID,
 			PendingOutgoingCount: 0,
-			SyncStatus:          "idle",
+			SyncStatus:           "idle",
 		}
 		h.db.UpdateSyncMetadata(r.Context(), sm)
 	}
 
 	status := models.SyncStatus{
-		DeviceID:            sm.DeviceID,
-		LastSyncTimestamp:   sm.LastSyncTimestamp,
+		DeviceID:             sm.DeviceID,
+		LastSyncTimestamp:    sm.LastSyncTimestamp,
 		PendingOutgoingCount: sm.PendingOutgoingCount,
-		SyncStatus:          sm.SyncStatus,
+		SyncStatus:           sm.SyncStatus,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(status)
 }
-

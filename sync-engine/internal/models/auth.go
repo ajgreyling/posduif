@@ -12,12 +12,11 @@ type LoginResponse struct {
 }
 
 type AuthError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code    string                 `json:"code"`
+	Message string                 `json:"message"`
 	Details map[string]interface{} `json:"details,omitempty"`
 }
 
 func (e *AuthError) Error() string {
 	return e.Message
 }
-

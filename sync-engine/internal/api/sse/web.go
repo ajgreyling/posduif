@@ -1,9 +1,7 @@
 package sse
 
 import (
-	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -72,4 +70,3 @@ func (h *WebSSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
-

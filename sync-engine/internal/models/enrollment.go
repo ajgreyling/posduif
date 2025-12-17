@@ -23,17 +23,17 @@ type EnrollmentResponse struct {
 }
 
 type EnrollmentDetails struct {
-	Token     string    `json:"token"`
-	TenantID  string    `json:"tenant_id"`
-	CreatedBy string    `json:"created_by"`
-	ExpiresAt time.Time `json:"expires_at"`
+	Token     string     `json:"token"`
+	TenantID  string     `json:"tenant_id"`
+	CreatedBy string     `json:"created_by"`
+	ExpiresAt time.Time  `json:"expires_at"`
 	UsedAt    *time.Time `json:"used_at,omitempty"`
-	Valid     bool      `json:"valid"`
+	Valid     bool       `json:"valid"`
 }
 
 type CompleteEnrollmentRequest struct {
-	Token     string                 `json:"token"`
-	DeviceID  string                 `json:"device_id"`
+	Token      string                 `json:"token"`
+	DeviceID   string                 `json:"device_id"`
 	DeviceInfo map[string]interface{} `json:"device_info"`
 }
 
@@ -45,11 +45,11 @@ type EnrollmentResult struct {
 }
 
 type AppInstructions struct {
-	Version     string                 `json:"version"`
-	TenantID    string                 `json:"tenant_id"`
-	APIBaseURL  string                 `json:"api_base_url"`
-	Widgets     map[string]WidgetConfig `json:"widgets"`
-	SyncConfig  SyncConfig             `json:"sync_config"`
+	Version    string                  `json:"version"`
+	TenantID   string                  `json:"tenant_id"`
+	APIBaseURL string                  `json:"api_base_url"`
+	Widgets    map[string]WidgetConfig `json:"widgets"`
+	SyncConfig SyncConfig              `json:"sync_config"`
 }
 
 type WidgetConfig struct {
@@ -59,8 +59,7 @@ type WidgetConfig struct {
 }
 
 type SyncConfig struct {
-	BatchSize            int  `json:"batch_size"`
-	Compression          bool `json:"compression"`
+	BatchSize           int  `json:"batch_size"`
+	Compression         bool `json:"compression"`
 	SyncIntervalSeconds int  `json:"sync_interval_seconds"`
 }
-

@@ -115,4 +115,3 @@ func (h *EnrollmentHandler) GetAppInstructions(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(instructions)
 }
-

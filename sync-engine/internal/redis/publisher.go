@@ -67,4 +67,3 @@ func (p *Publisher) PublishMessageRead(ctx context.Context, messageID string) er
 	}
 	return p.PublishMessageEvent(ctx, "message_read", data)
 }
-

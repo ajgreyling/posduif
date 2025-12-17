@@ -88,4 +88,3 @@ func (m *Manager) SyncOutgoing(ctx context.Context, messages []models.Message) (
 
 	return syncedCount, failedCount, failedMessages
 }
-

@@ -129,7 +129,7 @@ func main() {
 	}
 
 	// Graceful shutdown
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	go func() {
@@ -155,4 +155,3 @@ func main() {
 
 	log.Println("Server stopped")
 }
-

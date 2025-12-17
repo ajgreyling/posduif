@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -25,7 +24,7 @@ func TestCreateEnrollment(t *testing.T) {
 		Username: "test_web_user",
 		UserType: "web",
 	}
-	db.CreateUser(context.Background(), webUser)
+	_ = db.CreateUser(context.Background(), webUser)
 
 	// Create enrollment service and handler
 	cfg := &config.Config{
@@ -70,7 +69,7 @@ func TestGetEnrollment(t *testing.T) {
 		Username: "test_web_user",
 		UserType: "web",
 	}
-	db.CreateUser(context.Background(), webUser)
+	_ = db.CreateUser(context.Background(), webUser)
 
 	// Create enrollment token
 	cfg := &config.Config{
@@ -99,4 +98,3 @@ func TestGetEnrollment(t *testing.T) {
 		t.Error("Expected enrollment token to be valid")
 	}
 }
-

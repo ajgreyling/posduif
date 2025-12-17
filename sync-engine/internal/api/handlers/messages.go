@@ -49,7 +49,7 @@ func (h *MessagesHandler) CreateMessage(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Verify recipient exists
-	recipient, err := h.db.GetUserByID(r.Context(), req.RecipientID)
+	_, err := h.db.GetUserByID(r.Context(), req.RecipientID)
 	if err != nil {
 		http.Error(w, "Recipient not found", http.StatusNotFound)
 		return
@@ -204,4 +204,3 @@ func (h *MessagesHandler) MarkAsRead(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
-

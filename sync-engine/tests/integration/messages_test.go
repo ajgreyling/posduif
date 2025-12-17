@@ -74,4 +74,3 @@ func TestCreateMessage(t *testing.T) {
 		t.Errorf("Expected status 'pending_sync', got '%s'", msg.Status)
 	}
 }
-

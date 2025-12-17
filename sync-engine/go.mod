@@ -1,4 +1,4 @@
-module github.com/your-org/posduif/sync-engine
+module posduif/sync-engine
 
 go 1.23
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"posduif/sync-engine/internal/config"
 	"posduif/sync-engine/internal/database"
 	"posduif/sync-engine/internal/models"
@@ -34,7 +33,7 @@ func (s *Service) CreateEnrollment(ctx context.Context, createdByUserID string) 
 		return nil, fmt.Errorf("failed to create enrollment token: %w", err)
 	}
 
-	enrollmentURL := fmt.Sprintf("http://localhost:%d/api/enrollment/%s", 
+	enrollmentURL := fmt.Sprintf("http://localhost:%d/api/enrollment/%s",
 		s.config.SSE.Port, token.Token)
 
 	qrCodeData := map[string]interface{}{
@@ -157,12 +156,11 @@ func (s *Service) GetAppInstructions(ctx context.Context, deviceID string) (*mod
 			},
 		},
 		SyncConfig: models.SyncConfig{
-			BatchSize:            s.config.Sync.BatchSize,
-			Compression:          s.config.Sync.Compression,
-			SyncIntervalSeconds:  300,
+			BatchSize:           s.config.Sync.BatchSize,
+			Compression:         s.config.Sync.Compression,
+			SyncIntervalSeconds: 300,
 		},
 	}
 
 	return instructions, nil
 }
-

@@ -16,7 +16,7 @@ func (db *DB) GetUserByID(ctx context.Context, userID string) (*models.User, err
 	query := `SELECT id, username, user_type, device_id, online_status, last_seen, 
 	          enrolled_at, enrollment_token_id, created_at, updated_at 
 	          FROM users WHERE id = $1`
-	
+
 	err := db.Pool.QueryRow(ctx, query, userID).Scan(
 		&user.ID, &user.Username, &user.UserType, &user.DeviceID,
 		&user.OnlineStatus, &user.LastSeen, &user.EnrolledAt,
@@ -33,7 +33,7 @@ func (db *DB) GetUserByUsername(ctx context.Context, username string) (*models.U
 	query := `SELECT id, username, user_type, device_id, online_status, last_seen,
 	          enrolled_at, enrollment_token_id, created_at, updated_at
 	          FROM users WHERE username = $1`
-	
+
 	err := db.Pool.QueryRow(ctx, query, username).Scan(
 		&user.ID, &user.Username, &user.UserType, &user.DeviceID,
 		&user.OnlineStatus, &user.LastSeen, &user.EnrolledAt,
@@ -93,7 +93,7 @@ func (db *DB) CreateUser(ctx context.Context, user *models.User) error {
 	query := `INSERT INTO users (id, username, user_type, device_id, online_status, 
 	          enrolled_at, enrollment_token_id, created_at, updated_at)
 	          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
-	
+
 	now := time.Now()
 	if user.ID == "" {
 		user.ID = uuid.New().String()
@@ -117,7 +117,7 @@ func (db *DB) CreateMessage(ctx context.Context, msg *models.Message) error {
 	query := `INSERT INTO messages (id, sender_id, recipient_id, content, status, 
 	          created_at, updated_at)
 	          VALUES ($1, $2, $3, $4, $5, $6, $7)`
-	
+
 	now := time.Now()
 	if msg.ID == "" {
 		msg.ID = uuid.New().String()
@@ -201,13 +201,13 @@ func (db *DB) GetUnreadCount(ctx context.Context, userID string) (int, error) {
 
 func (db *DB) UpdateMessageStatus(ctx context.Context, messageID, status string) error {
 	query := `UPDATE messages SET status = $1, updated_at = NOW()`
-	
+
 	if status == "synced" {
 		query += ", synced_at = NOW()"
 	} else if status == "read" {
 		query += ", read_at = NOW()"
 	}
-	
+
 	query += " WHERE id = $2"
 	_, err := db.Pool.Exec(ctx, query, status, messageID)
 	return err
@@ -219,7 +219,7 @@ func (db *DB) CreateEnrollmentToken(ctx context.Context, token *models.Enrollmen
 	query := `INSERT INTO enrollment_tokens (id, token, created_by, tenant_id, 
 	          expires_at, created_at, updated_at)
 	          VALUES ($1, $2, $3, $4, $5, $6, $7)`
-	
+
 	now := time.Now()
 	if token.ID == "" {
 		token.ID = uuid.New().String()
@@ -244,7 +244,7 @@ func (db *DB) GetEnrollmentToken(ctx context.Context, token string) (*models.Enr
 	query := `SELECT id, token, created_by, tenant_id, expires_at, used_at, 
 	          device_id, created_at, updated_at
 	          FROM enrollment_tokens WHERE token = $1`
-	
+
 	err := db.Pool.QueryRow(ctx, query, token).Scan(
 		&et.ID, &et.Token, &et.CreatedBy, &et.TenantID,
 		&et.ExpiresAt, &et.UsedAt, &et.DeviceID,
@@ -310,7 +310,7 @@ func (db *DB) GetPendingMessagesForDevice(ctx context.Context, deviceID string, 
 	          WHERE u.device_id = $1 AND m.status = 'pending_sync'
 	          ORDER BY m.created_at ASC
 	          LIMIT $2`
-	
+
 	rows, err := db.Pool.Query(ctx, query, deviceID, limit)
 	if err != nil {
 		return nil, err
@@ -339,7 +339,7 @@ func (db *DB) GetSyncMetadata(ctx context.Context, deviceID string) (*models.Syn
 	query := `SELECT id, device_id, last_sync_timestamp, pending_outgoing_count, 
 	          sync_status, created_at, updated_at
 	          FROM sync_metadata WHERE device_id = $1`
-	
+
 	err := db.Pool.QueryRow(ctx, query, deviceID).Scan(
 		&sm.ID, &sm.DeviceID, &sm.LastSyncTimestamp,
 		&sm.PendingOutgoingCount, &sm.SyncStatus,
@@ -360,7 +360,7 @@ func (db *DB) UpdateSyncMetadata(ctx context.Context, sm *models.SyncMetadata) e
 	          pending_outgoing_count = EXCLUDED.pending_outgoing_count,
 	          sync_status = EXCLUDED.sync_status,
 	          updated_at = NOW()`
-	
+
 	now := time.Now()
 	if sm.CreatedAt.IsZero() {
 		sm.CreatedAt = now
@@ -373,4 +373,3 @@ func (db *DB) UpdateSyncMetadata(ctx context.Context, sm *models.SyncMetadata) e
 	)
 	return err
 }
-

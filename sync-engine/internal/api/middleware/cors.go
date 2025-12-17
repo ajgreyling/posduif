@@ -21,7 +21,7 @@ func NewCORSMiddleware(allowedOrigins, allowedMethods, allowedHeaders []string) 
 func (m *CORSMiddleware) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		
+
 		// Check if origin is allowed
 		allowed := false
 		for _, allowedOrigin := range m.allowedOrigins {
@@ -59,4 +59,3 @@ func joinStrings(strs []string, sep string) string {
 	}
 	return result
 }
-
