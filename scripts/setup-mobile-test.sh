@@ -136,10 +136,48 @@ echo -e "Enrollment URL: ${GREEN}$ENROLLMENT_URL${NC}"
 echo -e "Token: ${GREEN}$ENROLLMENT_TOKEN${NC}"
 echo ""
 
-# Generate QR code using Python or provide URL
+# Setup Python environment for QR code generation
+PYTHON_CMD=""
+VENV_WE_ACTIVATED=false
+
 if command -v python3 &> /dev/null; then
+    echo -e "${YELLOW}Setting up Python environment for QR code generation...${NC}"
+    
+    # Check if already in a virtual environment
+    if [ -n "$VIRTUAL_ENV" ]; then
+        echo -e "${GREEN}✓ Already in virtual environment: $VIRTUAL_ENV${NC}"
+        PYTHON_CMD="python3"
+    else
+        # Check for venv in project root
+        VENV_DIR="$PROJECT_ROOT/venv"
+        if [ -d "$VENV_DIR" ] && [ -f "$VENV_DIR/bin/activate" ]; then
+            echo -e "${YELLOW}Activating existing virtual environment...${NC}"
+            source "$VENV_DIR/bin/activate"
+            PYTHON_CMD="python3"
+            VENV_WE_ACTIVATED=true
+        else
+            # Create new venv
+            echo -e "${YELLOW}Creating virtual environment...${NC}"
+            python3 -m venv "$VENV_DIR"
+            source "$VENV_DIR/bin/activate"
+            PYTHON_CMD="python3"
+            VENV_WE_ACTIVATED=true
+            echo -e "${GREEN}✓ Virtual environment created${NC}"
+        fi
+    fi
+    
+    # Check if qrcode is installed
+    if ! $PYTHON_CMD -c "import qrcode" 2>/dev/null; then
+        echo -e "${YELLOW}Installing qrcode[pil]...${NC}"
+        $PYTHON_CMD -m pip install --quiet qrcode[pil]
+        echo -e "${GREEN}✓ qrcode[pil] installed${NC}"
+    else
+        echo -e "${GREEN}✓ qrcode module already available${NC}"
+    fi
+    
+    # Generate QR code
     echo -e "${YELLOW}Generating QR code...${NC}"
-    python3 << EOF
+    $PYTHON_CMD << EOF
 import qrcode
 import sys
 
@@ -151,11 +189,22 @@ img = qr.make_image(fill_color="black", back_color="white")
 img.save('/tmp/enrollment_qr.png')
 print("QR code saved to /tmp/enrollment_qr.png")
 EOF
-    echo -e "${GREEN}✓ QR code saved to /tmp/enrollment_qr.png${NC}"
-    echo -e "${YELLOW}  Open it with: open /tmp/enrollment_qr.png${NC}"
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓ QR code saved to /tmp/enrollment_qr.png${NC}"
+        echo -e "${YELLOW}  Open it with: open /tmp/enrollment_qr.png${NC}"
+    else
+        echo -e "${RED}✗ Failed to generate QR code${NC}"
+        echo -e "${YELLOW}  Use an online QR code generator with URL: $ENROLLMENT_URL${NC}"
+    fi
+    
+    # Deactivate venv if we activated it ourselves
+    if [ "$VENV_WE_ACTIVATED" = true ]; then
+        deactivate 2>/dev/null || true
+    fi
 else
-    echo -e "${YELLOW}Install python3 and qrcode[pil] to generate QR code image${NC}"
-    echo -e "${YELLOW}  Or use an online QR code generator with URL: $ENROLLMENT_URL${NC}"
+    echo -e "${YELLOW}⚠ python3 not found. Cannot generate QR code image${NC}"
+    echo -e "${YELLOW}  Install python3 or use an online QR code generator with URL: $ENROLLMENT_URL${NC}"
 fi
 
 echo ""
