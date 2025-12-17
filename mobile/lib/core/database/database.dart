@@ -32,6 +32,23 @@ class AppDatabase extends _$AppDatabase {
     return (select(messages)..where((m) => m.status.equals('pending_sync'))).get();
   }
 
+  Future<List<Message>> getAllMessages() {
+    return (select(messages)
+          ..orderBy([(m) => OrderingTerm.desc(m.createdAt)]))
+        .get();
+  }
+
+  Future<List<Message>> getMessagesForUser(String userId) {
+    return (select(messages)
+          ..where((m) => m.recipientId.equals(userId) | m.senderId.equals(userId))
+          ..orderBy([(m) => OrderingTerm.desc(m.createdAt)]))
+        .get();
+  }
+
+  Future<Message?> getMessageById(String id) {
+    return (select(messages)..where((m) => m.id.equals(id))).getSingleOrNull();
+  }
+
   Future<void> insertMessage(Message message) {
     return into(messages).insert(message, mode: InsertMode.replace);
   }
@@ -39,6 +56,17 @@ class AppDatabase extends _$AppDatabase {
   Future<void> updateMessageStatus(String id, String status) {
     return (update(messages)..where((m) => m.id.equals(id)))
         .write(MessagesCompanion(status: Value(status)));
+  }
+
+  Future<void> markMessageAsRead(String id) {
+    return (update(messages)..where((m) => m.id.equals(id)))
+        .write(MessagesCompanion(readAt: Value(DateTime.now())));
+  }
+
+  Stream<List<Message>> watchAllMessages() {
+    return (select(messages)
+          ..orderBy([(m) => OrderingTerm.desc(m.createdAt)]))
+        .watch();
   }
 }
 
