@@ -328,15 +328,13 @@ sequenceDiagram
     API-->>MobileApp: Enrollment result + app instructions URL
     
     MobileApp->>API: GET /api/app-instructions
-    API->>DB: Get tenant config
-    DB-->>API: Config
-    API-->>MobileApp: App instructions (widget URLs)
+    API->>DB: Get tenant config & schema
+    DB-->>API: Config & schema definition
+    API-->>MobileApp: App instructions (schema configuration)
     
-    MobileApp->>MobileDB: Store tenant ID & config
-    MobileApp->>WidgetCDN: Fetch remote widgets
-    WidgetCDN-->>MobileApp: Widget definitions
-    MobileApp->>MobileApp: Cache widgets
-    MobileApp->>MobileApp: Render remote widgets
+    MobileApp->>MobileDB: Store tenant ID & schema config
+    MobileApp->>MobileApp: Configure Drift ORM tables
+    MobileApp->>MobileApp: Create database tables dynamically
     MobileApp-->>MobileUser: App ready (messaging UI)
     
     Note over WebApp: Poll for enrollment status

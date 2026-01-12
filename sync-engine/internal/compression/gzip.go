@@ -34,3 +34,5 @@ func Decompress(data []byte) ([]byte, error) {
 func ShouldCompress(data []byte, threshold int) bool {
 	return len(data) > threshold
 }
+
+

@@ -2,28 +2,29 @@
 
 ## Overview
 
-The Flutter mobile application is a **container app** that uses **Flutter Remote Widgets** to provide an offline-first messaging client. The container app handles all permissions, QR code scanning for enrollment, and loads tenant-specific remote widgets from the backend. It uses Drift (SQLite) as the primary database and provides seamless messaging functionality with background synchronization when the device is online.
+The Flutter mobile application is an offline-first messaging client that uses runtime schema configuration. The app handles all permissions, QR code scanning for enrollment, and fetches the database schema from the backend during enrollment. It uses Drift (SQLite) as the primary database, configuring tables dynamically at runtime based on the schema fetched from the backend. The app provides seamless messaging functionality with background synchronization when the device is online.
 
 ## Architecture
 
-The mobile app uses a two-layer architecture:
+The mobile app uses a schema-driven architecture:
 
-1. **Container App Layer**: Handles permissions, enrollment, remote widget loading, and shared services
-2. **Remote Widgets Layer**: Tenant-specific UI components fetched from the backend
+1. **Enrollment Layer**: Handles QR code scanning, enrollment, and schema fetching
+2. **Database Layer**: Drift ORM configured dynamically at runtime using fetched schema
+3. **Application Layer**: Messaging UI and business logic using the configured database
 
 ```mermaid
 graph TB
-    subgraph "Container App Layer"
+    subgraph "Enrollment Layer"
         QRScanner[QR Scanner Screen]
         EnrollmentService[Enrollment Service]
-        RemoteWidgetLoader[Remote Widget Loader]
+        SchemaFetcher[Schema Fetcher]
         PermissionManager[Permission Manager]
     end
     
-    subgraph "Remote Widgets Layer"
-        InboxScreen[Inbox Screen<br/>Remote Widget]
-        MessageDetailScreen[Message Detail Screen<br/>Remote Widget]
-        ComposeScreen[Compose Screen<br/>Remote Widget]
+    subgraph "Application Layer"
+        InboxScreen[Inbox Screen]
+        MessageDetailScreen[Message Detail Screen]
+        ComposeScreen[Compose Screen]
     end
     
     subgraph "Shared Services"
@@ -31,28 +32,24 @@ graph TB
         APIClient[API Client]
         NotificationService[Notification Service]
         ConnectivityService[Connectivity Service]
-        AppInstructionsService[App Instructions Service]
+        SchemaService[Schema Service]
     end
     
     subgraph "Data Layer"
-        AppDatabase[(Drift/SQLite<br/>Local Database)]
+        AppDatabase[(Drift/SQLite<br/>Runtime Configured)]
         AppConfig[(App Config<br/>Tenant Info)]
     end
     
     subgraph "External"
         BackendAPI[Go Sync Engine API]
         SSEService[SSE Service]
-        WidgetCDN[Widget CDN]
     end
     
     QRScanner --> EnrollmentService
     EnrollmentService --> APIClient
-    EnrollmentService --> AppInstructionsService
-    AppInstructionsService --> RemoteWidgetLoader
-    RemoteWidgetLoader --> WidgetCDN
-    RemoteWidgetLoader --> InboxScreen
-    RemoteWidgetLoader --> MessageDetailScreen
-    RemoteWidgetLoader --> ComposeScreen
+    EnrollmentService --> SchemaFetcher
+    SchemaFetcher --> SchemaService
+    SchemaService --> AppDatabase
     
     InboxScreen --> SyncService
     MessageDetailScreen --> SyncService
@@ -76,42 +73,35 @@ lib/
 ├── main.dart                    # App entry point
 ├── app.dart                     # App widget with providers
 │
-├── container/                   # Container App Components
-│   ├── screens/
-│   │   ├── enrollment_screen.dart # QR scanner for enrollment
-│   │   └── loading_screen.dart   # Loading remote widgets
-│   ├── services/
-│   │   ├── enrollment_service.dart # Enrollment logic
-│   │   ├── remote_widget_loader.dart # Load remote widgets
-│   │   ├── app_instructions_service.dart # Fetch app instructions
-│   │   └── permission_service.dart # Permission management
-│   └── widgets/
-│       └── qr_scanner_widget.dart # QR code scanner
+├── features/                    # Feature Modules
+│   ├── enrollment/
+│   │   ├── screens/
+│   │   │   └── qr_scanner_screen.dart # QR scanner for enrollment
+│   │   └── services/
+│   │       └── enrollment_service.dart # Enrollment logic
+│   ├── messaging/
+│   │   ├── screens/
+│   │   │   ├── inbox_screen.dart   # Message inbox
+│   │   │   ├── message_detail_screen.dart # Message view
+│   │   │   └── compose_screen.dart # Compose message
+│   │   └── widgets/
+│   │       ├── message_list_item.dart # Message list item
+│   │       ├── message_bubble.dart    # Message bubble
+│   │       └── offline_indicator.dart # Offline indicator
+│   └── permissions/
+│       └── permission_service.dart # Permission management
 │
-├── remote_widgets/             # Remote Widgets (Tenant-Specific)
-│   ├── screens/
-│   │   ├── inbox_screen.dart   # Message inbox (remote)
-│   │   ├── message_detail_screen.dart # Message view (remote)
-│   │   └── compose_screen.dart # Compose message (remote)
-│   └── widgets/
-│       ├── message_list_item.dart # Message list item (remote)
-│       ├── message_bubble.dart    # Message bubble (remote)
-│       └── offline_indicator.dart # Offline indicator (remote)
-│
-├── shared/                      # Shared Services & Models
+├── core/                        # Core Services & Models
 │   ├── models/
 │   │   ├── user.dart           # User model
 │   │   ├── message.dart        # Message model
 │   │   ├── sync_status.dart    # Sync status model
 │   │   ├── enrollment.dart     # Enrollment model
-│   │   └── app_instructions.dart # App instructions model
+│   │   └── schema.dart         # Schema definition model
 │   │
 │   ├── database/
 │   │   ├── app_database.dart   # Drift database definition
-│   │   ├── tables/
-│   │   │   ├── users_table.dart # Users table definition
-│   │   │   ├── messages_table.dart # Messages table definition
-│   │   │   └── app_config_table.dart # App config table
+│   │   ├── schema_config.dart  # Runtime schema configuration
 │   │   └── migrations/
 │   │       └── migration_1.dart # Database migrations
 │   │
@@ -120,7 +110,8 @@ lib/
 │       ├── api_client.dart      # HTTP API client
 │       ├── notification_service.dart # Push notifications
 │       ├── connectivity_service.dart # Network connectivity
-│       └── device_service.dart  # Device ID management
+│       ├── device_service.dart  # Device ID management
+│       └── schema_service.dart  # Schema fetching and configuration
 │
 └── utils/
     ├── constants.dart           # App constants
@@ -238,23 +229,24 @@ class AppDatabase extends _$AppDatabase {
 
 ## Container App Components
 
-### Enrollment Screen
+### QR Scanner Screen
 
-**Purpose**: First screen shown when app is not enrolled. Displays QR code scanner.
+**Purpose**: First screen shown when app is not enrolled. Displays QR code scanner for enrollment.
 
 **Features:**
 - QR code scanner using camera
 - Instructions for scanning enrollment QR code
 - Permission request for camera
 - Error handling for invalid QR codes
-- Loading state during enrollment
+- Loading state during enrollment and schema fetching
 
 **Implementation:**
 ```dart
-class EnrollmentScreen extends ConsumerStatefulWidget {
+class QRScannerScreen extends ConsumerStatefulWidget {
   // QR scanner widget
   // Enrollment instructions
   // Permission handling
+  // Schema fetching after enrollment
 }
 ```
 
@@ -264,7 +256,7 @@ class EnrollmentScreen extends ConsumerStatefulWidget {
 - Scan and parse QR code data
 - Validate enrollment token with backend
 - Complete enrollment with device information
-- Fetch app instructions after enrollment
+- Fetch schema configuration after enrollment
 - Store enrollment data locally
 
 **Key Methods:**
@@ -300,48 +292,44 @@ class EnrollmentService {
 5. Call `GET /api/enrollment/:token` to validate
 6. Call `POST /api/enrollment/complete` with device info
 7. Backend creates user and returns app instructions URL
-8. Call `GET /api/app-instructions` to fetch widget config
-9. Store tenant ID and app instructions locally
-10. Load remote widgets based on instructions
+8. Call `GET /api/app-instructions` to fetch schema configuration
+9. Store tenant ID and schema configuration locally
+10. Configure Drift ORM database tables using fetched schema
 11. App ready for use
 
-### Remote Widget Loader
+### Schema Service
 
 **Responsibilities:**
-- Fetch remote widget definitions from CDN/backend
-- Cache widgets locally for offline use
-- Render remote widgets using Flutter Remote Widgets
-- Handle widget version updates
-- Manage widget lifecycle
+- Fetch database schema from backend
+- Parse schema JSON
+- Configure Drift ORM tables dynamically at runtime
+- Store schema configuration locally
+- Handle schema updates and migrations
 
 **Key Methods:**
 
 ```dart
-class RemoteWidgetLoader {
-  // Load app instructions from backend
-  Future<AppInstructions> loadAppInstructions();
+class SchemaService {
+  // Fetch schema from backend
+  Future<SchemaDefinition> fetchSchema();
   
-  // Fetch remote widget from URL
-  Future<Widget> loadRemoteWidget(String widgetUrl);
+  // Configure Drift database with schema
+  Future<void> configureDatabase(SchemaDefinition schema);
   
-  // Cache widget locally
-  Future<void> cacheWidget(String widgetId, Widget widget);
+  // Get cached schema
+  Future<SchemaDefinition?> getCachedSchema();
   
-  // Get cached widget
-  Future<Widget?> getCachedWidget(String widgetId);
-  
-  // Check for widget updates
-  Future<bool> checkForUpdates();
+  // Check for schema updates
+  Future<bool> checkForSchemaUpdates();
 }
 ```
 
-**Widget Loading Flow:**
-1. App instructions contain widget URLs
-2. Loader fetches widget JSON from CDN
-3. Parse widget definition
-4. Render using Flutter Remote Widgets
-5. Cache widget for offline use
-6. Check for updates periodically
+**Schema Configuration Flow:**
+1. After enrollment, fetch schema from `/api/app-instructions`
+2. Parse schema JSON (table definitions, columns, types, constraints)
+3. Use Drift's dynamic table API to create tables programmatically
+4. Store schema configuration locally for offline use
+5. Database ready for use with tenant-specific schema
 
 ### App Instructions Service
 
@@ -358,13 +346,25 @@ class AppInstructions {
   final String version;
   final String tenantId;
   final String apiBaseUrl;
-  final Map<String, WidgetConfig> widgets;
+  final SchemaDefinition schema;
   final SyncConfig syncConfig;
 }
 
-class WidgetConfig {
-  final String type; // 'remote_widget'
-  final String url;  // Widget JSON URL
+class SchemaDefinition {
+  final List<TableDefinition> tables;
+}
+
+class TableDefinition {
+  final String name;
+  final List<ColumnDefinition> columns;
+  final List<IndexDefinition> indexes;
+}
+
+class ColumnDefinition {
+  final String name;
+  final String type;
+  final bool primaryKey;
+  final bool nullable;
 }
 
 class SyncConfig {
@@ -532,11 +532,77 @@ class APIClient {
 - Streams connectivity changes
 - Distinguishes between WiFi and mobile data
 
-## Remote Widgets (Tenant-Specific UI)
+## Runtime Schema Configuration
 
-The messaging UI is implemented as remote widgets that are fetched from the backend after enrollment. These widgets are tenant-specific and can be updated without app store releases.
+The database schema is defined once on the backend and fetched during enrollment. Drift ORM configures database tables dynamically at runtime using the fetched schema definition.
 
-### Inbox Screen (Remote Widget)
+### Schema Fetching
+
+**Process:**
+1. After successful enrollment, mobile app calls `/api/app-instructions`
+2. Backend returns schema definition in JSON format
+3. Schema includes table names, column definitions, types, constraints, and indexes
+4. Mobile app stores schema configuration locally
+
+### Schema Structure
+
+**Schema Definition Format:**
+```json
+{
+  "tables": [
+    {
+      "name": "messages",
+      "columns": [
+        {"name": "id", "type": "text", "primary_key": true, "nullable": false},
+        {"name": "sender_id", "type": "text", "nullable": false},
+        {"name": "recipient_id", "type": "text", "nullable": false},
+        {"name": "content", "type": "text", "nullable": false},
+        {"name": "status", "type": "text", "nullable": false},
+        {"name": "created_at", "type": "datetime", "nullable": false},
+        {"name": "updated_at", "type": "datetime", "nullable": false},
+        {"name": "synced_at", "type": "datetime", "nullable": true},
+        {"name": "read_at", "type": "datetime", "nullable": true}
+      ],
+      "indexes": []
+    }
+  ]
+}
+```
+
+### Dynamic Table Configuration
+
+**Drift ORM Configuration:**
+- Uses Drift's dynamic table API to create tables programmatically
+- Tables are created based on schema definition fetched from backend
+- Schema versioning allows for migrations and updates
+- Each tenant can have different schema definitions
+
+**Implementation:**
+```dart
+class SchemaService {
+  Future<void> configureDatabase(SchemaDefinition schema) async {
+    final db = ref.read(appDatabaseProvider);
+    
+    for (final table in schema.tables) {
+      // Create table dynamically using Drift's API
+      await db.createTable(table);
+    }
+  }
+}
+```
+
+### Schema Updates
+
+**Update Process:**
+1. Backend schema changes are reflected in `/api/app-instructions` response
+2. Mobile app checks for schema version changes
+3. If schema version differs, app fetches new schema
+4. Drift ORM handles migrations automatically
+5. Database tables are updated to match new schema
+
+### Messaging Screens
+
+**Inbox Screen**
 
 **Features:**
 - List of received messages (sorted by created_at DESC)
@@ -551,16 +617,7 @@ The messaging UI is implemented as remote widgets that are fetched from the back
 - Watches messages stream from database
 - Updates on sync completion
 
-**Key Widgets:**
-```dart
-class InboxScreen extends ConsumerWidget {
-  // Displays list of messages
-  // Shows sync status
-  // Handles pull-to-refresh
-}
-```
-
-### Message Detail Screen (Remote Widget)
+**Message Detail Screen**
 
 **Features:**
 - Full message content display
@@ -575,12 +632,7 @@ class InboxScreen extends ConsumerWidget {
 - Updates read status on view
 - Handles reply composition
 
-**Remote Widget Implementation:**
-- Widget definition fetched from CDN
-- Rendered using Flutter Remote Widgets
-- Can be updated without app update
-
-### Compose Screen (Remote Widget)
+**Compose Screen**
 
 **Features:**
 - Recipient selection (if replying, pre-filled)
@@ -594,11 +646,6 @@ class InboxScreen extends ConsumerWidget {
 - Manages message composition state
 - Saves message to database immediately
 - Triggers sync if online
-
-**Remote Widget Implementation:**
-- Widget definition fetched from CDN
-- Rendered using Flutter Remote Widgets
-- Tenant-specific UI customization
 
 ## Widgets
 
@@ -718,11 +765,9 @@ dependencies:
   shared_preferences: ^2.2.2
   device_info_plus: ^9.1.1
   uuid: ^4.2.1
-  # Container app & enrollment
+  # Enrollment
   qr_code_scanner: ^1.0.1  # or mobile_scanner: ^3.5.0
   permission_handler: ^11.0.1
-  # Remote widgets
-  flutter_remote_widgets: ^1.0.0  # Flutter Remote Widgets package
   # QR code parsing
   qr_code_tools: ^1.0.0  # For parsing QR code data
 ```
@@ -759,14 +804,14 @@ dependencies:
    - Return user ID and app instructions URL
 
 3. **Fetch App Instructions**: `GET /api/app-instructions`
-   - Get widget URLs and configuration
+   - Get schema definition and configuration
    - Store tenant ID and API base URL
-   - Store app instructions locally
+   - Store schema configuration locally
 
-4. **Load Remote Widgets**: 
-   - Fetch widget definitions from CDN
-   - Cache widgets locally
-   - Render widgets using Flutter Remote Widgets
+4. **Configure Database**: 
+   - Parse schema definition from app instructions
+   - Use Drift's dynamic table API to create tables
+   - Configure database with tenant-specific schema
 
 5. **App Ready**: 
    - Show messaging interface
@@ -789,22 +834,24 @@ The app instructions JSON fetched from the backend contains:
   "version": "1.0.0",
   "tenant_id": "tenant_1",
   "api_base_url": "https://backend.example.com",
-  "widgets": {
-    "inbox": {
-      "type": "remote_widget",
-      "url": "https://cdn.example.com/widgets/inbox.json",
-      "version": "1.0.0"
-    },
-    "compose": {
-      "type": "remote_widget",
-      "url": "https://cdn.example.com/widgets/compose.json",
-      "version": "1.0.0"
-    },
-    "message_detail": {
-      "type": "remote_widget",
-      "url": "https://cdn.example.com/widgets/message_detail.json",
-      "version": "1.0.0"
-    }
+  "schema": {
+    "tables": [
+      {
+        "name": "messages",
+        "columns": [
+          {"name": "id", "type": "text", "primary_key": true, "nullable": false},
+          {"name": "sender_id", "type": "text", "nullable": false},
+          {"name": "recipient_id", "type": "text", "nullable": false},
+          {"name": "content", "type": "text", "nullable": false},
+          {"name": "status", "type": "text", "nullable": false},
+          {"name": "created_at", "type": "datetime", "nullable": false},
+          {"name": "updated_at", "type": "datetime", "nullable": false},
+          {"name": "synced_at", "type": "datetime", "nullable": true},
+          {"name": "read_at", "type": "datetime", "nullable": true}
+        ],
+        "indexes": []
+      }
+    ]
   },
   "sync_config": {
     "batch_size": 100,
@@ -830,9 +877,9 @@ final appConfigProvider = FutureProvider<AppConfig>((ref) async {
   return await db.appConfigDao.getConfig();
 });
 
-// Remote widget loader provider
-final remoteWidgetLoaderProvider = Provider<RemoteWidgetLoader>((ref) {
-  return RemoteWidgetLoader(ref.read(appInstructionsServiceProvider));
+// Schema service provider
+final schemaServiceProvider = Provider<SchemaService>((ref) {
+  return SchemaService(ref.read(appDatabaseProvider));
 });
 
 // Database provider

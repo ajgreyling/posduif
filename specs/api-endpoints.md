@@ -520,7 +520,7 @@ Content-Type: application/json
 
 ### GET /api/app-instructions
 
-Get app instructions (remote widget configuration) for enrolled device.
+Get app instructions (database schema configuration) for enrolled device.
 
 **Headers:**
 ```
@@ -541,22 +541,24 @@ X-Device-ID: device_123
   "version": "1.0.0",
   "tenant_id": "tenant_1",
   "api_base_url": "https://backend.example.com",
-  "widgets": {
-    "inbox": {
-      "type": "remote_widget",
-      "url": "https://cdn.example.com/widgets/inbox.json",
-      "version": "1.0.0"
-    },
-    "compose": {
-      "type": "remote_widget",
-      "url": "https://cdn.example.com/widgets/compose.json",
-      "version": "1.0.0"
-    },
-    "message_detail": {
-      "type": "remote_widget",
-      "url": "https://cdn.example.com/widgets/message_detail.json",
-      "version": "1.0.0"
-    }
+  "schema": {
+    "tables": [
+      {
+        "name": "messages",
+        "columns": [
+          {"name": "id", "type": "text", "primary_key": true, "nullable": false},
+          {"name": "sender_id", "type": "text", "nullable": false},
+          {"name": "recipient_id", "type": "text", "nullable": false},
+          {"name": "content", "type": "text", "nullable": false},
+          {"name": "status", "type": "text", "nullable": false},
+          {"name": "created_at", "type": "datetime", "nullable": false},
+          {"name": "updated_at", "type": "datetime", "nullable": false},
+          {"name": "synced_at", "type": "datetime", "nullable": true},
+          {"name": "read_at", "type": "datetime", "nullable": true}
+        ],
+        "indexes": []
+      }
+    ]
   },
   "sync_config": {
     "batch_size": 100,

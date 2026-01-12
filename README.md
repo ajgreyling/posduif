@@ -1,6 +1,6 @@
 # Posduif – Offline-First Multi-Tenant Mobile & Web Sync Engine
 
-Posduif is a self-hosted, open-source sync engine designed for offline-first mobile applications and web users. It enables seamless real-time synchronization between Flutter mobile clients (using Flutter Remote Widgets with a container app), web users, and a PostgreSQL backend, with per-tenant schemas and full control over which tables are synced.
+Posduif is a self-hosted, open-source sync engine designed for offline-first mobile applications and web users. It enables seamless real-time synchronization between Flutter mobile clients, web users, and a PostgreSQL backend, with per-tenant schemas and full control over which tables are synced. The schema is defined once on the backend and fetched at runtime by mobile clients during enrollment, configuring the Drift ORM database dynamically.
 
 Posduif is built for FOSS environments, scalable deployments, and intermittent connectivity, providing developers with a single place to define tenant-specific data models and sync rules.
 
@@ -9,7 +9,7 @@ Posduif is built for FOSS environments, scalable deployments, and intermittent c
 ### Offline-First Mobile Sync
 
 - Mobile apps use SQLite (Drift) as the primary offline database
-- **Flutter Remote Widgets**: Mobile app uses a container app architecture with remote widgets fetched from the backend
+- **Runtime Schema Configuration**: Schema is defined once on the backend and fetched during QR code enrollment, configuring Drift ORM tables dynamically at runtime
 - **QR Code Enrollment**: Mobile users enroll by scanning QR codes displayed in the web interface
 - Tables can be marked as:
   - `mobile-synced` → automatically synchronized
@@ -54,36 +54,28 @@ Posduif is built for FOSS environments, scalable deployments, and intermittent c
 
 ### Mobile Application Architecture
 
-The mobile application uses a **container app** architecture with **Flutter Remote Widgets**:
+The mobile application uses a **schema-driven architecture** where the database schema is fetched from the backend during enrollment:
 
 ```
 ┌─────────────────────────────────────────────────┐
-│         Container App (Flutter)                 │
-│  - All permissions (camera, storage, etc.)      │
+│         Mobile App (Flutter)                     │
 │  - QR code scanner                              │
-│  - Remote widget loader                         │
 │  - Enrollment service                           │
-│  - Shared services (sync, database, API)       │
+│  - Schema fetcher                               │
+│  - Drift ORM (runtime configured)              │
+│  - Sync service                                 │
+│  - Shared services (database, API)            │
 └─────────────────────────────────────────────────┘
                     │
-                    │ Fetches & Renders
-                    ▼
-┌─────────────────────────────────────────────────┐
-│      Remote Widgets (Tenant-Specific UI)        │
-│  - Inbox screen                                 │
-│  - Message detail screen                        │
-│  - Compose screen                               │
-│  - Widgets (message list, bubbles, etc.)        │
-└─────────────────────────────────────────────────┘
-                    │
-                    │ Syncs Data
+                    │ Fetches Schema
                     ▼
 ┌─────────────────────────────────────────────────┐
 │         Go Sync Engine (Backend)                │
 │  - API endpoints                                │
 │  - Enrollment service                           │
-│  - App instructions endpoint                    │
+│  - Schema endpoint                              │
 │  - Sync manager                                 │
+│  - PostgreSQL (schema definition)               │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -96,15 +88,15 @@ The mobile application uses a **container app** architecture with **Flutter Remo
 5. **Mobile Validates Token**: Mobile app calls backend to validate enrollment token
 6. **Mobile Completes Enrollment**: Mobile app sends device information to complete enrollment
 7. **Backend Creates User**: Backend creates mobile user account and links device to tenant
-8. **Mobile Fetches Instructions**: Mobile app fetches app instructions (remote widget URLs, config)
-9. **Mobile Loads Remote Widgets**: Container app loads and renders tenant-specific remote widgets
+8. **Mobile Fetches Schema**: Mobile app fetches database schema configuration from backend
+9. **Mobile Configures Database**: Drift ORM configures database tables dynamically using fetched schema
 10. **App Ready**: Mobile app is configured and ready for use
 
 ### Tech Stack
 
 - **Mobile**: 
-  - Flutter container app with all permissions
-  - Flutter Remote Widgets for tenant-specific UI
+  - Flutter app with all necessary permissions
+  - Runtime schema configuration with Drift ORM
   - Drift (SQLite) for offline-first data storage
   - Riverpod for state management
   - QR code scanner for enrollment
@@ -123,7 +115,6 @@ The mobile application uses a **container app** architecture with **Flutter Remo
 - Go ≥ 1.21
 - Flutter ≥ 3.13
 - Drift (Flutter SQLite ORM)
-- Flutter Remote Widgets package
 
 ### 1. Clone the repository
 
@@ -182,21 +173,22 @@ go run ./cmd/sync-engine/main.go --config=config/config.yaml
 
 ### 6. Mobile setup
 
-#### Container App
+#### Mobile App
 
-The mobile container app should:
+The mobile app should:
 - Request all necessary permissions (camera, storage, network, etc.)
 - Implement QR code scanner for enrollment
-- Load remote widgets based on app instructions from backend
+- Fetch database schema from backend during enrollment
+- Configure Drift ORM tables dynamically using fetched schema
 - Provide shared services (sync, database, API client)
 
 #### Enrollment Process
 
-1. Launch container app (shows QR scanner if not enrolled)
+1. Launch mobile app (shows QR scanner if not enrolled)
 2. Web user generates enrollment QR code
 3. Mobile user scans QR code
-4. App automatically enrolls and fetches remote widgets
-5. App displays tenant-specific messaging interface
+4. App automatically enrolls and fetches database schema
+5. App configures database and displays messaging interface
 
 ### 7. Web setup
 
@@ -277,15 +269,24 @@ Response:
   "version": "1.0.0",
   "tenant_id": "tenant_1",
   "api_base_url": "https://backend.example.com",
-  "widgets": {
-    "inbox": {
-      "type": "remote_widget",
-      "url": "https://cdn.example.com/widgets/inbox.json"
-    },
-    "compose": {
-      "type": "remote_widget",
-      "url": "https://cdn.example.com/widgets/compose.json"
-    }
+  "schema": {
+    "tables": [
+      {
+        "name": "messages",
+        "columns": [
+          {"name": "id", "type": "text", "primary_key": true},
+          {"name": "sender_id", "type": "text", "nullable": false},
+          {"name": "recipient_id", "type": "text", "nullable": false},
+          {"name": "content", "type": "text", "nullable": false},
+          {"name": "status", "type": "text", "nullable": false},
+          {"name": "created_at", "type": "datetime", "nullable": false},
+          {"name": "updated_at", "type": "datetime", "nullable": false},
+          {"name": "synced_at", "type": "datetime", "nullable": true},
+          {"name": "read_at", "type": "datetime", "nullable": true}
+        ],
+        "indexes": []
+      }
+    ]
   },
   "sync_config": {
     "batch_size": 100,
@@ -304,16 +305,16 @@ Response:
    - Partial sync filters
 3. Deploy tenant-specific sync engine
 4. Mobile clients enroll via QR code
-5. Mobile clients automatically receive remote widget updates
+5. Mobile clients fetch schema and configure database at runtime
 6. Mobile clients automatically sync data via SSE
 7. Use offline SQLite for most operations; fall back to online API calls as needed
 
-## Container App Permissions
+## Mobile App Permissions
 
-The container app requests all necessary permissions:
+The mobile app requests all necessary permissions:
 
 - **Camera**: For QR code scanning during enrollment
-- **Internet**: For API communication and remote widget fetching
+- **Internet**: For API communication and schema fetching
 - **Network State**: For connectivity monitoring
 - **Storage**: For SQLite database
 - **Notifications**: For push notifications
@@ -321,24 +322,24 @@ The container app requests all necessary permissions:
 - **Location**: If needed for location-based features
 - **Contacts**: If needed for contact integration
 
-## Remote Widgets
+## Runtime Schema Configuration
 
-Remote widgets are tenant-specific UI components fetched from the backend:
+The database schema is defined once on the backend and fetched during enrollment:
 
-- **Dynamic UI**: Each tenant can have custom UI without app updates
-- **Version Control**: Widget versions tracked and updated automatically
-- **CDN Support**: Widgets can be served from CDN for performance
-- **Offline Fallback**: Cached widgets work offline
+- **Single Source of Truth**: Schema defined in PostgreSQL backend
+- **Runtime Configuration**: Drift ORM configures tables dynamically using fetched schema
+- **Tenant-Specific**: Each tenant can have different schema definitions
+- **Version Control**: Schema versions tracked and updated automatically
 
 ## Roadmap
 
 - [ ] Multi-schema sharding support
 - [ ] Conflict resolution strategies
 - [ ] GUI for defining schema and sync rules
-- [ ] Flutter Remote Widgets integration examples
+- [ ] Schema versioning and migration support
 - [ ] Full support for intermittent connectivity edge cases
-- [ ] Widget versioning and rollback
-- [ ] Widget caching strategies
+- [ ] Dynamic table creation and updates
+- [ ] Schema validation and error handling
 
 ## Documentation
 
@@ -353,4 +354,6 @@ Remote widgets are tenant-specific UI components fetched from the backend:
 ## License
 
 [Specify your license here]
+
+
 

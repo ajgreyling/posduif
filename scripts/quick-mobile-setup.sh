@@ -131,3 +131,5 @@ echo "  pkill ngrok"
 echo "  docker-compose -f infrastructure/docker-compose.yml down"
 echo ""
 
+
+

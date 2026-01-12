@@ -145,3 +145,5 @@ All dependencies must be:
 - Configuration files with secrets should be in `.gitignore`
 - Each component has its own README with specific setup instructions
 
+
+

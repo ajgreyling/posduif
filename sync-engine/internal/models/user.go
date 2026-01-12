@@ -21,3 +21,5 @@ type UserFilter struct {
 	Filter string
 	Status *bool
 }
+
+

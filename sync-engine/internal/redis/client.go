@@ -41,3 +41,5 @@ func (c *Client) GetClient() *redis.Client {
 func (c *Client) HealthCheck(ctx context.Context) error {
 	return c.rdb.Ping(ctx).Err()
 }
+
+

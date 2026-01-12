@@ -667,7 +667,8 @@ This document maps each BDD scenario from `messenger-demo-app.md` to the impleme
 - **Mobile user created**: `INSERT INTO users` with user_type='mobile'
 - **Device linked**: Device ID linked to user
 - **App instructions fetched**: `GET /api/app-instructions`
-- **Remote widgets loaded**: Widgets fetched from CDN
+- **Schema configuration loaded**: Schema definition fetched from backend
+- **Database configured**: Drift ORM tables created dynamically
 - **App ready**: Messaging interface displayed
 
 **Implementation Components:**
@@ -678,9 +679,9 @@ This document maps each BDD scenario from `messenger-demo-app.md` to the impleme
 - **Database Operations**:
   - `UPDATE enrollment_tokens SET used_at = NOW()`
   - `INSERT INTO users` (mobile user)
-- **UI Component**: `EnrollmentScreen` (Flutter Mobile Container App)
+- **UI Component**: `QRScannerScreen` (Flutter Mobile App)
 - **Service**: `EnrollmentService` (Flutter Mobile)
-- **Service**: `RemoteWidgetLoader` loads widgets
+- **Service**: `SchemaService` configures database tables
 
 ### Scenario: Mobile app fetches app instructions after enrollment
 
@@ -692,10 +693,11 @@ This document maps each BDD scenario from `messenger-demo-app.md` to the impleme
 - **Fetch app instructions**: `GET /api/app-instructions` with device ID
 
 **Then Steps:**
-- **App instructions returned**: JSON with widget URLs and config
+- **App instructions returned**: JSON with schema definition and config
 - **Tenant ID stored**: Stored in local app config
 - **API base URL stored**: Stored for API client
-- **Widget URLs available**: Ready for remote widget loading
+- **Schema configuration available**: Ready for database table configuration
+- **Database tables created**: Drift ORM configures tables dynamically
 
 **Implementation Components:**
 - **API Endpoint**: `GET /api/app-instructions` (see `specs/api-endpoints.md`)

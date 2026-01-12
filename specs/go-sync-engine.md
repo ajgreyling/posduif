@@ -256,7 +256,7 @@ type EnrollmentService interface {
     // Complete enrollment with device information
     CompleteEnrollment(ctx context.Context, req *CompleteEnrollmentRequest) (*EnrollmentResult, error)
     
-    // Generate app instructions for enrolled device
+    // Generate app instructions (schema configuration) for enrolled device
     GetAppInstructions(ctx context.Context, deviceID string) (*AppInstructions, error)
 }
 ```
@@ -267,7 +267,8 @@ type EnrollmentService interface {
 3. Mobile scans QR code and validates → `GetEnrollment()`
 4. Mobile completes enrollment → `CompleteEnrollment()`
 5. Backend creates user, links device, returns app instructions URL
-6. Mobile fetches app instructions → `GetAppInstructions()`
+6. Mobile fetches app instructions (schema configuration) → `GetAppInstructions()`
+7. Mobile configures Drift ORM database using fetched schema
 
 ## API Endpoints
 
@@ -502,7 +503,7 @@ Complete enrollment process. Mobile app sends device information to complete enr
 - `404 Not Found`: Token not found or expired
 
 #### GET /api/app-instructions
-Get app instructions (remote widget configuration) for enrolled device.
+Get app instructions (database schema configuration) for enrolled device.
 
 **Headers:**
 - `X-Device-ID`: Mobile device identifier
@@ -513,22 +514,24 @@ Get app instructions (remote widget configuration) for enrolled device.
   "version": "1.0.0",
   "tenant_id": "tenant_1",
   "api_base_url": "https://backend.example.com",
-  "widgets": {
-    "inbox": {
-      "type": "remote_widget",
-      "url": "https://cdn.example.com/widgets/inbox.json",
-      "version": "1.0.0"
-    },
-    "compose": {
-      "type": "remote_widget",
-      "url": "https://cdn.example.com/widgets/compose.json",
-      "version": "1.0.0"
-    },
-    "message_detail": {
-      "type": "remote_widget",
-      "url": "https://cdn.example.com/widgets/message_detail.json",
-      "version": "1.0.0"
-    }
+  "schema": {
+    "tables": [
+      {
+        "name": "messages",
+        "columns": [
+          {"name": "id", "type": "text", "primary_key": true, "nullable": false},
+          {"name": "sender_id", "type": "text", "nullable": false},
+          {"name": "recipient_id", "type": "text", "nullable": false},
+          {"name": "content", "type": "text", "nullable": false},
+          {"name": "status", "type": "text", "nullable": false},
+          {"name": "created_at", "type": "datetime", "nullable": false},
+          {"name": "updated_at", "type": "datetime", "nullable": false},
+          {"name": "synced_at", "type": "datetime", "nullable": true},
+          {"name": "read_at", "type": "datetime", "nullable": true}
+        ],
+        "indexes": []
+      }
+    ]
   },
   "sync_config": {
     "batch_size": 100,

@@ -1,6 +1,6 @@
 # Mobile App Setup Guide
 
-This guide will help you deploy the Posduif mobile container app to your Samsung tablet and complete QR code enrollment.
+This guide will help you deploy the Posduif mobile app to your Samsung tablet and complete QR code enrollment.
 
 ## Prerequisites
 
@@ -196,9 +196,9 @@ After successful enrollment:
 
 After enrollment:
 - The mobile app is linked to the tenant
-- App instructions are stored locally
+- Schema configuration is stored locally
+- Database tables are configured dynamically using Drift ORM
 - The app can sync with the backend
-- Remote widgets can be loaded
 
 ## Stopping Services
 
@@ -213,4 +213,6 @@ pkill -f sync-engine
 cd infrastructure
 docker-compose down
 ```
+
+
 

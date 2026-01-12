@@ -19,3 +19,5 @@ all:
         jwt_secret: ${JWT_SECRET}
         log_level: info
 
+
+

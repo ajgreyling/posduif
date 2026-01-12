@@ -63,3 +63,5 @@ type SyncConfig struct {
 	Compression         bool `json:"compression"`
 	SyncIntervalSeconds int  `json:"sync_interval_seconds"`
 }
+
+

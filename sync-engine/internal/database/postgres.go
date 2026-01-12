@@ -56,3 +56,5 @@ func (db *DB) Close() {
 func (db *DB) HealthCheck(ctx context.Context) error {
 	return db.Pool.Ping(ctx)
 }
+
+

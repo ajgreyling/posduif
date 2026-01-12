@@ -16,3 +16,5 @@ psql -h localhost -U posduif -d tenant_1 -f tests/fixtures/test-data.sql
 
 echo "Test fixtures loaded successfully!"
 
+
+

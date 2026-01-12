@@ -32,3 +32,5 @@ echo ""
 echo "To stop services: docker-compose -f infrastructure/docker-compose.yml down"
 echo "To view logs: docker-compose -f infrastructure/docker-compose.yml logs -f"
 
+
+

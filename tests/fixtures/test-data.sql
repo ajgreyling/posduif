@@ -42,3 +42,5 @@ INSERT INTO enrollment_tokens (id, token, created_by, tenant_id, expires_at) VAL
      NOW() + INTERVAL '1 hour')
 ON CONFLICT (token) DO NOTHING;
 
+
+

@@ -1,6 +1,6 @@
-# Posduif Mobile Container App
+# Posduif Mobile App
 
-Flutter mobile container app with offline-first architecture and Flutter Remote Widgets support.
+Flutter mobile app with offline-first architecture and runtime schema configuration using Drift ORM.
 
 ## Structure
 
@@ -27,4 +27,6 @@ flutter test
 ## Dependencies
 
 All dependencies are FOSS (Free and Open Source Software) with permissive licenses.
+
+
 
