@@ -4,11 +4,13 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Grant REPLICATION privilege to posduif user (required for logical replication slots)
+-- Grant SUPERUSER and REPLICATION privileges to posduif user
+-- SUPERUSER is required to create logical replication slots
+-- REPLICATION is required to connect as a replication client
 DO $$
 BEGIN
     IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'posduif') THEN
-        ALTER USER posduif WITH REPLICATION;
+        ALTER USER posduif WITH SUPERUSER REPLICATION;
     END IF;
 END
 $$;

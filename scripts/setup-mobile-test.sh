@@ -32,7 +32,10 @@ POSTGRES_CONTAINER_NAME=""
 
 if [ -z "$POSTGRES_RUNNING" ]; then
     echo -e "${YELLOW}PostgreSQL container not running. Starting Docker Compose services...${NC}"
-    docker-compose up -d postgres redis web-api > /dev/null 2>&1 || docker compose up -d postgres redis web-api > /dev/null 2>&1
+    echo -e "${YELLOW}Pulling images if needed...${NC}"
+    docker-compose pull postgres redis web-api 2>&1 || docker compose pull postgres redis web-api 2>&1
+    echo -e "${YELLOW}Starting containers...${NC}"
+    docker-compose up -d postgres redis web-api 2>&1 || docker compose up -d postgres redis web-api 2>&1
     echo "Waiting for services to be ready..."
     sleep 10
     
@@ -75,7 +78,7 @@ if [ -z "$POSTGRES_RUNNING" ]; then
             
             echo -e "${YELLOW}Restarting PostgreSQL with new volume...${NC}"
             cd "$PROJECT_ROOT/infrastructure"
-            docker-compose up -d postgres > /dev/null 2>&1 || docker compose up -d postgres > /dev/null 2>&1
+            docker-compose up -d postgres 2>&1 || docker compose up -d postgres 2>&1
             
             # Wait again
             WAITED=0
@@ -130,7 +133,8 @@ if docker ps --format "{{.Names}}" | grep -q "^${WEB_API_CONTAINER_NAME}$"; then
 else
     echo -e "${YELLOW}⚠ Web API container not found. Starting it...${NC}"
     cd "$PROJECT_ROOT/infrastructure"
-    docker-compose up -d web-api > /dev/null 2>&1 || docker compose up -d web-api > /dev/null 2>&1
+    docker-compose pull web-api 2>&1 || docker compose pull web-api 2>&1
+    docker-compose up -d web-api 2>&1 || docker compose up -d web-api 2>&1
     sleep 5
     
     # Wait for web-api to be ready
@@ -177,37 +181,40 @@ check_and_fix_replication_permissions() {
         # Docker environment
         echo -e "${YELLOW}Detected Docker environment (container: $POSTGRES_CONTAINER)${NC}"
         
-        # Check if posduif user has REPLICATION privilege
-        # When POSTGRES_USER is set to posduif, posduif is the superuser (not postgres)
+        # Check if posduif user has SUPERUSER and REPLICATION privileges
+        # SUPERUSER is required to create logical replication slots
+        # REPLICATION is required to connect as a replication client
         # Connect to postgres database (system database) or tenant_1
+        IS_SUPERUSER=$(docker exec "$POSTGRES_CONTAINER" psql -U posduif -d postgres -tAc "SELECT rolsuper FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || docker exec "$POSTGRES_CONTAINER" psql -U posduif -d tenant_1 -tAc "SELECT rolsuper FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || echo "f")
         HAS_REPLICATION=$(docker exec "$POSTGRES_CONTAINER" psql -U posduif -d postgres -tAc "SELECT rolreplication FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || docker exec "$POSTGRES_CONTAINER" psql -U posduif -d tenant_1 -tAc "SELECT rolreplication FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || echo "f")
         
-        if [ "$HAS_REPLICATION" = "t" ]; then
-            echo -e "${GREEN}✓ posduif user already has REPLICATION privileges${NC}"
+        if [ "$IS_SUPERUSER" = "t" ] && [ "$HAS_REPLICATION" = "t" ]; then
+            echo -e "${GREEN}✓ posduif user already has SUPERUSER and REPLICATION privileges${NC}"
         else
-            echo -e "${YELLOW}Granting REPLICATION privileges to posduif user...${NC}"
+            echo -e "${YELLOW}Granting SUPERUSER and REPLICATION privileges to posduif user...${NC}"
             # Try postgres database first, fallback to tenant_1
             if docker exec -i "$POSTGRES_CONTAINER" psql -U posduif -d postgres <<EOF > /dev/null 2>&1
-ALTER USER posduif WITH REPLICATION;
+ALTER USER posduif WITH SUPERUSER REPLICATION;
 EOF
             then
-                echo -e "${GREEN}✓ REPLICATION privileges granted${NC}"
+                echo -e "${GREEN}✓ SUPERUSER and REPLICATION privileges granted${NC}"
             elif docker exec -i "$POSTGRES_CONTAINER" psql -U posduif -d tenant_1 <<EOF > /dev/null 2>&1
-ALTER USER posduif WITH REPLICATION;
+ALTER USER posduif WITH SUPERUSER REPLICATION;
 EOF
             then
-                echo -e "${GREEN}✓ REPLICATION privileges granted${NC}"
+                echo -e "${GREEN}✓ SUPERUSER and REPLICATION privileges granted${NC}"
             else
-                echo -e "${RED}✗ Failed to grant REPLICATION privileges${NC}"
+                echo -e "${RED}✗ Failed to grant SUPERUSER and REPLICATION privileges${NC}"
                 echo -e "${YELLOW}  Make sure PostgreSQL container is running and accessible${NC}"
                 return 1
             fi
         fi
         
-        # Verify the privilege was granted
+        # Verify the privileges were granted
+        IS_SUPERUSER=$(docker exec "$POSTGRES_CONTAINER" psql -U posduif -d postgres -tAc "SELECT rolsuper FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || docker exec "$POSTGRES_CONTAINER" psql -U posduif -d tenant_1 -tAc "SELECT rolsuper FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || echo "f")
         HAS_REPLICATION=$(docker exec "$POSTGRES_CONTAINER" psql -U posduif -d postgres -tAc "SELECT rolreplication FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || docker exec "$POSTGRES_CONTAINER" psql -U posduif -d tenant_1 -tAc "SELECT rolreplication FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || echo "f")
-        if [ "$HAS_REPLICATION" != "t" ]; then
-            echo -e "${RED}✗ Verification failed: posduif user does not have REPLICATION privileges${NC}"
+        if [ "$IS_SUPERUSER" != "t" ] || [ "$HAS_REPLICATION" != "t" ]; then
+            echo -e "${RED}✗ Verification failed: posduif user does not have SUPERUSER and REPLICATION privileges${NC}"
             return 1
         fi
         
@@ -215,29 +222,33 @@ EOF
         # Local PostgreSQL installation
         echo -e "${YELLOW}Detected local PostgreSQL installation${NC}"
         
-        # Check if posduif user has REPLICATION privilege
+        # Check if posduif user has SUPERUSER and REPLICATION privileges
+        # SUPERUSER is required to create logical replication slots
+        # REPLICATION is required to connect as a replication client
+        IS_SUPERUSER=$(sudo -u postgres psql -tAc "SELECT rolsuper FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || echo "f")
         HAS_REPLICATION=$(sudo -u postgres psql -tAc "SELECT rolreplication FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || echo "f")
         
-        if [ "$HAS_REPLICATION" = "t" ]; then
-            echo -e "${GREEN}✓ posduif user already has REPLICATION privileges${NC}"
+        if [ "$IS_SUPERUSER" = "t" ] && [ "$HAS_REPLICATION" = "t" ]; then
+            echo -e "${GREEN}✓ posduif user already has SUPERUSER and REPLICATION privileges${NC}"
         else
-            echo -e "${YELLOW}Granting REPLICATION privileges to posduif user...${NC}"
+            echo -e "${YELLOW}Granting SUPERUSER and REPLICATION privileges to posduif user...${NC}"
             if sudo -u postgres psql <<EOF > /dev/null 2>&1
-ALTER USER posduif WITH REPLICATION;
+ALTER USER posduif WITH SUPERUSER REPLICATION;
 EOF
             then
-                echo -e "${GREEN}✓ REPLICATION privileges granted${NC}"
+                echo -e "${GREEN}✓ SUPERUSER and REPLICATION privileges granted${NC}"
             else
-                echo -e "${RED}✗ Failed to grant REPLICATION privileges${NC}"
+                echo -e "${RED}✗ Failed to grant SUPERUSER and REPLICATION privileges${NC}"
                 echo -e "${YELLOW}  Make sure you have sudo access and PostgreSQL is running${NC}"
                 return 1
             fi
         fi
         
-        # Verify the privilege was granted
+        # Verify the privileges were granted
+        IS_SUPERUSER=$(sudo -u postgres psql -tAc "SELECT rolsuper FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || echo "f")
         HAS_REPLICATION=$(sudo -u postgres psql -tAc "SELECT rolreplication FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || echo "f")
-        if [ "$HAS_REPLICATION" != "t" ]; then
-            echo -e "${RED}✗ Verification failed: posduif user does not have REPLICATION privileges${NC}"
+        if [ "$IS_SUPERUSER" != "t" ] || [ "$HAS_REPLICATION" != "t" ]; then
+            echo -e "${RED}✗ Verification failed: posduif user does not have SUPERUSER and REPLICATION privileges${NC}"
             return 1
         fi
     fi
@@ -248,7 +259,7 @@ EOF
 # Check and fix replication permissions
 if ! check_and_fix_replication_permissions; then
     echo -e "${RED}✗ Failed to set up replication permissions${NC}"
-    echo -e "${YELLOW}  The sync engine requires REPLICATION privileges to create logical replication slots${NC}"
+    echo -e "${YELLOW}  The sync engine requires SUPERUSER and REPLICATION privileges to create logical replication slots${NC}"
     echo -e "${YELLOW}  You can manually fix this by running: scripts/fix-replication-permissions.sh${NC}"
     exit 1
 fi
@@ -256,18 +267,20 @@ fi
 # Verify PostgreSQL connection and permissions for sync engine
 echo -e "${YELLOW}Verifying PostgreSQL connection and permissions...${NC}"
 if [ -n "$POSTGRES_CONTAINER_NAME" ]; then
-    # Test connection and verify replication privileges
-    if docker exec "$POSTGRES_CONTAINER_NAME" psql -U posduif -d tenant_1 -tAc "SELECT rolreplication FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null | grep -q "t"; then
+    # Test connection and verify SUPERUSER and replication privileges
+    IS_SUPERUSER=$(docker exec "$POSTGRES_CONTAINER_NAME" psql -U posduif -d tenant_1 -tAc "SELECT rolsuper FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || echo "f")
+    HAS_REPLICATION=$(docker exec "$POSTGRES_CONTAINER_NAME" psql -U posduif -d tenant_1 -tAc "SELECT rolreplication FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || echo "f")
+    if [ "$IS_SUPERUSER" = "t" ] && [ "$HAS_REPLICATION" = "t" ]; then
         # Verify we can query the database (simulating sync engine connection)
         if docker exec "$POSTGRES_CONTAINER_NAME" psql -U posduif -d tenant_1 -tAc "SELECT 1" > /dev/null 2>&1; then
             echo -e "${GREEN}✓ PostgreSQL connection verified (Docker container: $POSTGRES_CONTAINER_NAME)${NC}"
-            echo -e "${GREEN}✓ Replication privileges confirmed${NC}"
+            echo -e "${GREEN}✓ SUPERUSER and REPLICATION privileges confirmed${NC}"
         else
             echo -e "${RED}✗ Failed to verify PostgreSQL connection${NC}"
             exit 1
         fi
     else
-        echo -e "${RED}✗ Replication privileges not found for posduif user${NC}"
+        echo -e "${RED}✗ SUPERUSER and REPLICATION privileges not found for posduif user${NC}"
         exit 1
     fi
 else

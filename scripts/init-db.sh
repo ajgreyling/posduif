@@ -9,14 +9,16 @@ sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';" || true
 
 # Create posduif user and database
 sudo -u postgres psql <<EOF
--- Create user with REPLICATION privilege (required for logical replication slots)
+-- Create user with SUPERUSER and REPLICATION privileges
+-- SUPERUSER is required to create logical replication slots
+-- REPLICATION is required to connect as a replication client
 DO \$\$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'posduif') THEN
-        CREATE USER posduif WITH PASSWORD 'secret' REPLICATION;
+        CREATE USER posduif WITH PASSWORD 'secret' SUPERUSER REPLICATION;
     ELSE
-        -- Grant REPLICATION privilege if user already exists
-        ALTER USER posduif WITH REPLICATION;
+        -- Grant SUPERUSER and REPLICATION privileges if user already exists
+        ALTER USER posduif WITH SUPERUSER REPLICATION;
     END IF;
 END
 \$\$;
