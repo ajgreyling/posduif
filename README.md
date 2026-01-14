@@ -1,6 +1,6 @@
 # Posduif – Offline-First Multi-Tenant Mobile & Web Sync Engine
 
-Posduif is a self-hosted, open-source sync engine designed for offline-first mobile applications and web users. It enables seamless real-time synchronization between Flutter mobile clients, web users, and a PostgreSQL backend, with per-tenant schemas and full control over which tables are synced. The schema is defined once on the backend and fetched at runtime by mobile clients during enrollment, configuring the Drift ORM database dynamically.
+Posduif is a self-hosted, open-source sync engine designed for offline-first mobile applications and web users. It enables seamless real-time synchronization between Flutter mobile clients (using SQLite) and a PostgreSQL backend, with per-tenant schemas and full control over which tables are synced. Web users connect directly to PostgreSQL with live database access and do not participate in synchronization. The schema is defined once on the backend and fetched at runtime by mobile clients during enrollment, configuring the Drift ORM database dynamically.
 
 Posduif is built for FOSS environments, scalable deployments, and intermittent connectivity, providing developers with a single place to define tenant-specific data models and sync rules.
 
@@ -21,26 +21,26 @@ Posduif is built for FOSS environments, scalable deployments, and intermittent c
 ### Multi-Tenant Backend
 
 - Single PostgreSQL database per tenant, with a schema per tenant
-- Each tenant has a dedicated Go sync engine instance
+- Each tenant has a dedicated Go sync engine instance to ensure tennant isolation.
+- Web users connect directly to PostgreSQL with live database access (no synchronization)
 - Schema changes propagate to both SQLite on device and PostgreSQL backend
 - **Tenant Enrollment**: QR code-based enrollment links mobile devices to specific tenants
 
 ### Real-Time Updates
 
-- Mobile clients receive updates via Server-Sent Events (SSE)
-- Low power consumption for mobile devices
-- Web clients receive real-time notifications via SSE
+- Mobile clients receive sync updates via Server-Sent Events (SSE) (Chosen over WebSocktets or API polling as it is more power efficient as as single long-lived HTTP connection over bi-directional keep-alives)
+- Web clients receive real-time notifications via SSE (notifications only, not data synchronization)
 
 ### Scalable, Self-Hosted Infrastructure
 
-- Uses Redis Streams (disk-backed) for fan-out and event distribution
+- Uses Redis Streams (disk-backed) for fan-out and event distribution (Closest to a Kafka type setup without actually implementing Kafka which is not the best fit here)
 - Full self-hosted stack – no third-party SaaS dependencies
 - Designed for horizontal scaling via multiple sync engine instances
 
 ### Compression & Connectivity
 
-- All synced data is compressed in both directions
-- Built to handle intermittent or poor network connectivity gracefully
+- All mobile sync data is compressed in both directions (PostgreSQL ↔ SQLite)
+- Built to handle intermittent or poor network connectivity gracefully for mobile devices
 
 ### Unified Data Modeling
 
@@ -51,6 +51,15 @@ Posduif is built for FOSS environments, scalable deployments, and intermittent c
 - Simplifies schema evolution per tenant
 
 ## Architecture
+
+### Architecture Overview
+
+Posduif uses two distinct data access patterns:
+
+- **Web Users**: Connect directly to PostgreSQL with live database access via the Go sync engine API. No synchronization is required as web users always have a direct connection to the database.
+- **Mobile Users**: Use SQLite (Drift) as an offline-first local database that synchronizes bidirectionally with PostgreSQL via the sync engine. Mobile devices sync data when online and work offline when connectivity is unavailable.
+
+The sync engine handles synchronization between PostgreSQL and mobile SQLite databases only. Web users access data directly through the API layer.
 
 ### Mobile Application Architecture
 
@@ -74,8 +83,17 @@ The mobile application uses a **schema-driven architecture** where the database 
 │  - API endpoints                                │
 │  - Enrollment service                           │
 │  - Schema endpoint                              │
-│  - Sync manager                                 │
+│  - Sync manager (mobile ↔ PostgreSQL)         │
 │  - PostgreSQL (schema definition)               │
+└─────────────────────────────────────────────────┘
+                    ▲
+                    │ Direct DB Access
+                    │
+┌─────────────────────────────────────────────────┐
+│         Web App (Flutter)                       │
+│  - API client                                   │
+│  - Live PostgreSQL queries                      │
+│  - SSE notifications                            │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -100,8 +118,14 @@ The mobile application uses a **schema-driven architecture** where the database 
   - Drift (SQLite) for offline-first data storage
   - Riverpod for state management
   - QR code scanner for enrollment
+  - Bidirectional sync with PostgreSQL backend
 - **Web**: Flutter web application
+  - Direct PostgreSQL access via Go sync engine API
+  - Live database queries (no synchronization)
+  - SSE for real-time notifications
 - **Backend**: Go sync engine
+  - Handles mobile ↔ PostgreSQL synchronization
+  - Provides API for web users to access PostgreSQL
 - **Database**: PostgreSQL (schema-per-tenant)
 - **Messaging**: Redis Streams (disk-backed)
 - **Realtime**: SSE (Server-Sent Events)
@@ -194,9 +218,10 @@ The mobile app should:
 
 The Flutter web application provides:
 - User authentication
+- Direct PostgreSQL database access via API (live queries, no synchronization)
 - Mobile user enrollment (QR code generation)
 - User selection and messaging interface
-- Real-time updates via SSE
+- Real-time notifications via SSE (notifications only, not data synchronization)
 
 ## Enrollment API
 
@@ -304,10 +329,11 @@ Response:
    - Web-only
    - Partial sync filters
 3. Deploy tenant-specific sync engine
-4. Mobile clients enroll via QR code
-5. Mobile clients fetch schema and configure database at runtime
-6. Mobile clients automatically sync data via SSE
-7. Use offline SQLite for most operations; fall back to online API calls as needed
+4. Web users connect directly to PostgreSQL via API (live database access)
+5. Mobile clients enroll via QR code
+6. Mobile clients fetch schema and configure database at runtime
+7. Mobile clients automatically sync data with PostgreSQL via SSE
+8. Mobile devices use offline SQLite for most operations; sync when online
 
 ## Mobile App Permissions
 
