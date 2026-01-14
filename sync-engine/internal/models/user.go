@@ -13,13 +13,15 @@ type User struct {
 	LastSeen          *time.Time `json:"last_seen,omitempty" db:"last_seen"`
 	EnrolledAt        *time.Time `json:"enrolled_at,omitempty" db:"enrolled_at"`
 	EnrollmentTokenID *string    `json:"enrollment_token_id,omitempty" db:"enrollment_token_id"`
+	LastMessageSent   *string    `json:"last_message_sent,omitempty" db:"last_message_sent"`
 	CreatedAt         time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 type UserFilter struct {
-	Filter string
-	Status *bool
+	Filter       string
+	Status       *bool
+	ExcludeUserID string
 }
 
 

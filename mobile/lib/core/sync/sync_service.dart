@@ -32,7 +32,9 @@ class SyncService {
     try {
       final response = await _apiClient.syncIncoming();
       final messages = response['messages'] as List<dynamic>? ?? [];
+      final users = response['users'] as List<dynamic>? ?? [];
 
+      // Sync messages
       for (final msgData in messages) {
         final message = Message(
           id: msgData['id'],
@@ -45,6 +47,27 @@ class SyncService {
           syncedAt: DateTime.now(),
         );
         await _database.insertMessage(message);
+      }
+
+      // Sync users with last_message_sent (last-write-wins)
+      if (users.isNotEmpty) {
+        final usersList = users.map((userData) {
+          final remoteUpdatedAt = DateTime.parse(userData['updated_at']);
+          return User(
+            id: userData['id'],
+            username: userData['username'],
+            userType: userData['user_type'],
+            deviceId: userData['device_id'],
+            onlineStatus: userData['online_status'] ?? false,
+            lastSeen: userData['last_seen'] != null 
+                ? DateTime.parse(userData['last_seen']) 
+                : null,
+            lastMessageSent: userData['last_message_sent'],
+            createdAt: DateTime.parse(userData['created_at']),
+            updatedAt: remoteUpdatedAt,
+          );
+        }).toList();
+        await _database.insertUsers(usersList);
       }
     } catch (e) {
       // Handle error

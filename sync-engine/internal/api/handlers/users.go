@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"posduif/sync-engine/internal/api/middleware"
 	"posduif/sync-engine/internal/database"
 	"posduif/sync-engine/internal/models"
 )
@@ -31,6 +32,21 @@ func (h *UsersHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		status, err := strconv.ParseBool(statusStr)
 		if err == nil {
 			filter.Status = &status
+		}
+	}
+
+	// Try to get user ID from JWT token (for web users)
+	if userID, ok := middleware.GetUserID(r.Context()); ok {
+		filter.ExcludeUserID = userID
+	} else {
+		// For device-authenticated requests, try to get user ID from device_id
+		deviceID := r.Header.Get("X-Device-ID")
+		if deviceID != "" {
+			// Get user by device ID to exclude them
+			user, err := h.db.GetUserByDeviceID(r.Context(), deviceID)
+			if err == nil && user != nil {
+				filter.ExcludeUserID = user.ID
+			}
 		}
 	}
 

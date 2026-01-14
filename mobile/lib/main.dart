@@ -6,16 +6,75 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/permissions/permission_service.dart';
 import 'features/enrollment/screens/qr_scanner_screen.dart';
 import 'features/messaging/screens/home_screen.dart';
+import 'features/auth/screens/username_selection_screen.dart';
+import 'features/messaging/screens/chat_screen.dart';
+import 'core/providers/providers.dart';
+import 'core/enrollment/enrollment_service.dart';
+
+Future<void> _initializeApp(ProviderContainer container) async {
+  final prefs = await SharedPreferences.getInstance();
+  final userId = prefs.getString('user_id');
+  if (userId != null) {
+    container.read(currentUserIdProvider.notifier).state = userId;
+  }
+}
+
+/// Detect Hot Restart and clear enrollment data in debug mode
+/// Uses timestamp-based approach: if last_app_start_timestamp is missing or old (> 5 seconds),
+/// it indicates a Hot Restart and enrollment data should be cleared
+Future<void> _handleHotRestart() async {
+  if (!kDebugMode) {
+    return; // Only clear enrollment data in debug mode
+  }
+
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final lastStartTimestamp = prefs.getInt('last_app_start_timestamp');
+    final now = DateTime.now().millisecondsSinceEpoch;
+    const thresholdSeconds = 5; // If timestamp is older than 5 seconds, consider it a restart
+
+    if (lastStartTimestamp == null) {
+      // First run or data was cleared - update timestamp
+      debugPrint('[MAIN] First run detected - setting timestamp');
+      await prefs.setInt('last_app_start_timestamp', now);
+      return;
+    }
+
+    final timeSinceLastStart = (now - lastStartTimestamp) / 1000; // Convert to seconds
+
+    if (timeSinceLastStart > thresholdSeconds) {
+      // Hot Restart detected - clear enrollment data
+      debugPrint('[MAIN] Hot Restart detected (${timeSinceLastStart.toStringAsFixed(1)}s since last start) - clearing enrollment data');
+      await EnrollmentService.clearEnrollmentData();
+    } else {
+      debugPrint('[MAIN] Normal app start (${timeSinceLastStart.toStringAsFixed(1)}s since last start) - keeping enrollment data');
+    }
+
+    // Update timestamp for next check
+    await prefs.setInt('last_app_start_timestamp', now);
+  } catch (e) {
+    debugPrint('[MAIN] Error handling Hot Restart detection: $e');
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // Handle Hot Restart detection and clear enrollment data if needed (debug mode only)
+  await _handleHotRestart();
+  
   // Request all permissions on app start
   await PermissionService.requestAllPermissions();
   
+  final container = ProviderContainer();
+  
+  // Initialize current user ID if enrolled
+  await _initializeApp(container);
+  
   runApp(
-    const ProviderScope(
-      child: PosduifMobileApp(),
+    UncontrolledProviderScope(
+      container: container,
+      child: const PosduifMobileApp(),
     ),
   );
 }
@@ -70,8 +129,30 @@ class PosduifMobileApp extends StatelessWidget {
               builder: (context, state) => QRScannerScreen(),
             ),
             GoRoute(
+              path: '/username-selection',
+              builder: (context, state) {
+                final extra = state.extra as Map<String, dynamic>?;
+                return UsernameSelectionScreen(
+                  token: extra?['token'],
+                  deviceId: extra?['deviceId'],
+                  deviceInfo: extra?['deviceInfo'],
+                );
+              },
+            ),
+            GoRoute(
               path: '/home',
               builder: (context, state) => HomeScreen(),
+            ),
+            GoRoute(
+              path: '/conversations',
+              builder: (context, state) => HomeScreen(),
+            ),
+            GoRoute(
+              path: '/chat/:recipientId',
+              builder: (context, state) {
+                final recipientId = state.pathParameters['recipientId']!;
+                return ChatScreen(recipientId: recipientId);
+              },
             ),
           ],
         );
@@ -98,9 +179,11 @@ class PosduifMobileApp extends StatelessWidget {
       debugPrint('[MAIN] device_id: ${deviceId ?? "null"}');
       debugPrint('[MAIN] api_base_url: ${apiBaseUrl ?? "null"}');
       
-      // Must have both device_id and api_base_url to be considered enrolled
-      if (deviceId == null || apiBaseUrl == null) {
-        debugPrint('[MAIN] Enrollment status: false (missing device_id or api_base_url)');
+      final userId = prefs.getString('user_id');
+      
+      // Must have device_id, api_base_url, and user_id to be considered enrolled
+      if (deviceId == null || apiBaseUrl == null || userId == null) {
+        debugPrint('[MAIN] Enrollment status: false (missing device_id, api_base_url, or user_id)');
         return false;
       }
       
@@ -114,21 +197,8 @@ class PosduifMobileApp extends StatelessWidget {
         await prefs.remove('api_base_url');
         await prefs.remove('tenant_id');
         await prefs.remove('user_id');
-        await prefs.remove('app_instructions');
-        await prefs.remove('app_instructions_url');
         debugPrint('[MAIN] Enrollment status: false (localhost detected and cleared)');
         return false;
-      }
-      
-      // Verify app_instructions_url is saved (optional but helpful)
-      final appInstructionsUrl = prefs.getString('app_instructions_url');
-      if (appInstructionsUrl != null) {
-        debugPrint('[MAIN] Found app_instructions_url: $appInstructionsUrl');
-        // Validate it's not localhost
-        if (appInstructionsUrl.contains('localhost') || appInstructionsUrl.contains('127.0.0.1')) {
-          debugPrint('[MAIN] WARNING: app_instructions_url is localhost - clearing');
-          await prefs.remove('app_instructions_url');
-        }
       }
       
       final isEnrolled = true;

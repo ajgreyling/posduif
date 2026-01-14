@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/user.dart';
+import '../widgets/new_message_dialog.dart';
 
 class UserSelectionScreen extends ConsumerStatefulWidget {
   const UserSelectionScreen({super.key});
@@ -60,6 +61,16 @@ class _UserSelectionScreenState extends ConsumerState<UserSelectionScreen> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (context) => const NewMessageDialog(),
+          );
+        },
+        icon: const Icon(Icons.message),
+        label: const Text('New Message'),
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -78,7 +89,23 @@ class _UserSelectionScreenState extends ConsumerState<UserSelectionScreen> {
                             child: Text(user.username[0].toUpperCase()),
                           ),
                           title: Text(user.username),
-                          subtitle: Text(user.userType),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(user.userType),
+                              if (user.lastMessageSent != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Last message sent: ${user.lastMessageSent}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                           trailing: user.onlineStatus
                               ? const Icon(Icons.circle, size: 12, color: Colors.green)
                               : null,

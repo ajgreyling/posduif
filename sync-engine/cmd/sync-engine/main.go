@@ -18,6 +18,7 @@ import (
 	"posduif/sync-engine/internal/database"
 	"posduif/sync-engine/internal/enrollment"
 	"posduif/sync-engine/internal/redis"
+	"posduif/sync-engine/internal/sync"
 )
 
 func main() {
@@ -37,12 +38,56 @@ func main() {
 	}
 	defer db.Close()
 
+	// Run database migrations
+	ctx := context.Background()
+	if err := db.RunMigrations(ctx); err != nil {
+		log.Fatalf("Failed to run migrations: %v", err)
+	}
+
 	// Initialize Redis
 	redisClient, err := redis.NewClient(cfg)
 	if err != nil {
 		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
 	defer redisClient.Close()
+
+	// Initialize WAL components if enabled
+	var walService *sync.WALService
+	var changeTracker *sync.ChangeTracker
+	walEnabled := cfg.Sync.WAL.Enabled
+
+	if walEnabled {
+		// Create replication slot manager
+		slotManager := database.NewReplicationSlotManager(db.Pool, cfg)
+		
+		// Create replication slot
+		slotName, err := slotManager.CreateReplicationSlot(ctx)
+		if err != nil {
+			log.Fatalf("Failed to create replication slot: %v", err)
+		}
+		log.Printf("Created/verified replication slot: %s", slotName)
+
+		// Initialize change tracker
+		changeTracker = sync.NewChangeTracker(db)
+
+		// Initialize WAL service
+		walService, err = sync.NewWALService(db, changeTracker, db.GetPool(), slotManager, &cfg.Sync.WAL)
+		if err != nil {
+			log.Fatalf("Failed to create WAL service: %v", err)
+		}
+
+		// Start WAL service
+		if err := walService.Start(ctx); err != nil {
+			log.Fatalf("Failed to start WAL service: %v", err)
+		}
+		log.Println("WAL service started")
+		defer walService.Stop()
+	} else {
+		changeTracker = sync.NewChangeTracker(db)
+	}
+
+	// Initialize sync manager
+	syncManager := sync.NewManager(db, changeTracker, walEnabled)
 
 	// Initialize services
 	enrollmentService := enrollment.NewService(db, cfg)
@@ -52,7 +97,7 @@ func main() {
 	authHandler := handlers.NewAuthHandler(db, cfg.Auth.JWTSecret, cfg.Auth.JWTExpiration)
 	enrollmentHandler := handlers.NewEnrollmentHandler(enrollmentService)
 	messagesHandler := handlers.NewMessagesHandler(db, redisPublisher)
-	syncHandler := handlers.NewSyncHandler(db)
+	syncHandler := handlers.NewSyncHandler(db, syncManager)
 	usersHandler := handlers.NewUsersHandler(db)
 
 	// Initialize middleware
@@ -111,13 +156,11 @@ func main() {
 
 	// Device-authenticated endpoints (require X-Device-ID header)
 	deviceMux := http.NewServeMux()
-	deviceMux.HandleFunc("/api/app-instructions", enrollmentHandler.GetAppInstructions)
 	deviceMux.HandleFunc("/api/sync/incoming", syncHandler.GetIncoming)
 	deviceMux.HandleFunc("/api/sync/outgoing", syncHandler.UploadOutgoing)
 	deviceMux.HandleFunc("/api/sync/status", syncHandler.GetSyncStatus)
-
-	// Widget endpoints (public, for remote widgets)
-	mux.HandleFunc("/widgets/", handlers.ServeWidget)
+	deviceMux.HandleFunc("/api/users", usersHandler.ListUsers)
+	deviceMux.HandleFunc("/api/users/", usersHandler.GetUser)
 
 	// Apply middleware chain
 	handler := loggingMiddleware.Middleware(
@@ -133,15 +176,17 @@ func main() {
 
 				// Route to appropriate handler based on path
 				if strings.HasPrefix(path, "/api/enrollment/create") ||
-					strings.HasPrefix(path, "/api/messages") ||
-					strings.HasPrefix(path, "/api/users") {
+					strings.HasPrefix(path, "/api/messages") {
 					// Protected routes - require auth
 					authMiddleware.Middleware(protectedMux).ServeHTTP(w, r)
-				} else if strings.HasPrefix(path, "/api/app-instructions") ||
-					strings.HasPrefix(path, "/api/sync/") {
+				} else if strings.HasPrefix(path, "/api/sync/") ||
+					(strings.HasPrefix(path, "/api/users") && r.Header.Get("X-Device-ID") != "") {
 					// Device-authenticated routes - require X-Device-ID
 					log.Printf("[ROUTER] Routing to deviceMux for path: %s", path)
 					deviceMux.ServeHTTP(w, r)
+				} else if strings.HasPrefix(path, "/api/users") {
+					// Protected routes - require auth (for web users with JWT)
+					authMiddleware.Middleware(protectedMux).ServeHTTP(w, r)
 				} else {
 					// Public routes
 					mux.ServeHTTP(w, r)

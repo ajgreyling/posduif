@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class APIClient {
   final Dio _dio;
   final String baseUrl;
-  String? _token;
+  String? _userId;
 
   APIClient({required this.baseUrl})
       : _dio = Dio(BaseOptions(
@@ -14,53 +14,66 @@ class APIClient {
         )) {
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) {
-        if (_token != null) {
-          options.headers['Authorization'] = 'Bearer $_token';
+        if (_userId != null) {
+          options.headers['X-User-ID'] = _userId!;
         }
         return handler.next(options);
       },
-      onError: (error, handler) {
-        if (error.response?.statusCode == 401) {
-          _token = null;
-        }
-        return handler.next(error);
-      },
     ));
 
-    _loadToken();
+    _loadUserId();
   }
 
-  Future<void> _loadToken() async {
+  Future<void> _loadUserId() async {
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('auth_token');
+    _userId = prefs.getString('current_user_id');
   }
 
-  void setToken(String token) {
-    _token = token;
+  void setUserId(String userId) {
+    _userId = userId;
     SharedPreferences.getInstance().then((prefs) {
-      prefs.setString('auth_token', token);
+      prefs.setString('current_user_id', userId);
     });
   }
 
-  void clearToken() {
-    _token = null;
+  void clearUserId() {
+    _userId = null;
     SharedPreferences.getInstance().then((prefs) {
-      prefs.remove('auth_token');
+      prefs.remove('current_user_id');
     });
   }
 
-  String? get token => _token;
+  String? get userId => _userId;
 
-  // Authentication
-  Future<Map<String, dynamic>> login(String username, String password) async {
+  // Authentication (username only, no password)
+  Future<Map<String, dynamic>> login(String username) async {
     try {
       final response = await _dio.post(
         '/api/auth/login',
-        data: {'username': username, 'password': password},
+        data: {'username': username},
       );
-      return response.data;
+      return response.data as Map<String, dynamic>;
     } catch (e) {
-      // Re-throw with more context if needed
+      rethrow;
+    }
+  }
+
+  // Get available web users for login screen (public endpoint)
+  Future<List<dynamic>> getAvailableWebUsers() async {
+    try {
+      final response = await _dio.get('/api/auth/available-users');
+      // Handle both array response and object with 'users' field
+      if (response.data is List) {
+        return response.data as List<dynamic>;
+      } else if (response.data is Map) {
+        final data = response.data as Map<String, dynamic>;
+        if (data.containsKey('users')) {
+          return data['users'] as List<dynamic>;
+        }
+        return [];
+      }
+      return [];
+    } catch (e) {
       rethrow;
     }
   }
@@ -72,7 +85,7 @@ class APIClient {
     if (status != null) queryParams['status'] = status.toString();
 
     final response = await _dio.get('/api/users', queryParameters: queryParams);
-    return response.data['users'] as List<dynamic>;
+    return response.data as List<dynamic>;
   }
 
   Future<Map<String, dynamic>> getUser(String id) async {
@@ -98,10 +111,10 @@ class APIClient {
       '/api/messages',
       data: {'recipient_id': recipientId, 'content': content},
     );
-    return response.data;
+    return response.data as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> getMessages({
+  Future<List<dynamic>> getMessages({
     String? recipientId,
     String? status,
     int? limit,
@@ -115,7 +128,7 @@ class APIClient {
 
     final response =
         await _dio.get('/api/messages', queryParameters: queryParams);
-    return response.data;
+    return response.data as List<dynamic>;
   }
 
   Future<int> getUnreadCount() async {

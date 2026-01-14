@@ -42,7 +42,7 @@ if ! docker ps | grep -q posduif-e2e-postgres; then
 version: '3.8'
 services:
   postgres:
-    image: postgres:16
+    image: postgres:18
     container_name: posduif-e2e-postgres
     environment:
       POSTGRES_USER: posduif

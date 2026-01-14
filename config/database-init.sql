@@ -4,6 +4,15 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Grant REPLICATION privilege to posduif user (required for logical replication slots)
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'posduif') THEN
+        ALTER USER posduif WITH REPLICATION;
+    END IF;
+END
+$$;
+
 -- Create users table first (web users exist before enrollment)
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -14,6 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
     last_seen TIMESTAMP,
     enrolled_at TIMESTAMP,
     enrollment_token_id UUID,
+    last_message_sent TEXT,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT chk_user_type CHECK (user_type IN ('web', 'mobile'))
@@ -131,6 +141,20 @@ $$ language 'plpgsql';
 
 CREATE TRIGGER update_messages_read_at BEFORE UPDATE ON messages
     FOR EACH ROW EXECUTE FUNCTION update_read_at();
+
+-- Create function to update last_message_sent when user sends a message
+CREATE OR REPLACE FUNCTION update_user_last_message_sent()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE users 
+    SET last_message_sent = NEW.content, updated_at = NOW()
+    WHERE id = NEW.sender_id;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_user_last_message_sent_trigger AFTER INSERT ON messages
+    FOR EACH ROW EXECUTE FUNCTION update_user_last_message_sent();
 
 -- Grant privileges (assuming posduif user exists)
 -- GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO posduif;

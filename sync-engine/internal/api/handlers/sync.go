@@ -8,14 +8,19 @@ import (
 
 	"posduif/sync-engine/internal/database"
 	"posduif/sync-engine/internal/models"
+	"posduif/sync-engine/internal/sync"
 )
 
 type SyncHandler struct {
-	db *database.DB
+	db      *database.DB
+	manager *sync.Manager
 }
 
-func NewSyncHandler(db *database.DB) *SyncHandler {
-	return &SyncHandler{db: db}
+func NewSyncHandler(db *database.DB, manager *sync.Manager) *SyncHandler {
+	return &SyncHandler{
+		db:      db,
+		manager: manager,
+	}
 }
 
 func (h *SyncHandler) GetIncoming(w http.ResponseWriter, r *http.Request) {
@@ -37,19 +42,22 @@ func (h *SyncHandler) GetIncoming(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	messages, err := h.db.GetPendingMessagesForDevice(r.Context(), deviceID, limit)
+	messages, err := h.manager.SyncIncoming(r.Context(), deviceID, limit)
 	if err != nil {
 		http.Error(w, "Failed to get messages", http.StatusInternalServerError)
 		return
 	}
 
-	// Update message status to synced
-	for _, msg := range messages {
-		h.db.UpdateMessageStatus(r.Context(), msg.ID, "synced")
+	// Get all users for sync (to sync last_message_sent)
+	users, err := h.db.GetUsers(r.Context(), models.UserFilter{})
+	if err != nil {
+		// Log error but don't fail sync
+		users = []models.User{}
 	}
 
 	response := models.SyncIncomingResponse{
 		Messages:      messages,
+		Users:         users,
 		Compressed:    false,
 		SyncTimestamp: time.Now(),
 	}
@@ -89,6 +97,12 @@ func (h *SyncHandler) UploadOutgoing(w http.ResponseWriter, r *http.Request) {
 			})
 		} else {
 			syncedCount++
+			// Update sender's last_message_sent
+			sender, err := h.db.GetUserByID(r.Context(), msg.SenderID)
+			if err == nil {
+				sender.LastMessageSent = &msg.Content
+				h.db.UpdateUser(r.Context(), sender)
+			}
 		}
 	}
 

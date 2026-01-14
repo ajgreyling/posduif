@@ -16,13 +16,13 @@ import (
 func (db *DB) GetUserByID(ctx context.Context, userID string) (*models.User, error) {
 	var user models.User
 	query := `SELECT id, username, user_type, device_id, online_status, last_seen, 
-	          enrolled_at, enrollment_token_id, created_at, updated_at 
+	          enrolled_at, enrollment_token_id, last_message_sent, created_at, updated_at 
 	          FROM users WHERE id = $1`
 
 	err := db.Pool.QueryRow(ctx, query, userID).Scan(
 		&user.ID, &user.Username, &user.UserType, &user.DeviceID,
 		&user.OnlineStatus, &user.LastSeen, &user.EnrolledAt,
-		&user.EnrollmentTokenID, &user.CreatedAt, &user.UpdatedAt,
+		&user.EnrollmentTokenID, &user.LastMessageSent, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -33,13 +33,30 @@ func (db *DB) GetUserByID(ctx context.Context, userID string) (*models.User, err
 func (db *DB) GetUserByUsername(ctx context.Context, username string) (*models.User, error) {
 	var user models.User
 	query := `SELECT id, username, user_type, device_id, online_status, last_seen,
-	          enrolled_at, enrollment_token_id, created_at, updated_at
+	          enrolled_at, enrollment_token_id, last_message_sent, created_at, updated_at
 	          FROM users WHERE username = $1`
 
 	err := db.Pool.QueryRow(ctx, query, username).Scan(
 		&user.ID, &user.Username, &user.UserType, &user.DeviceID,
 		&user.OnlineStatus, &user.LastSeen, &user.EnrolledAt,
-		&user.EnrollmentTokenID, &user.CreatedAt, &user.UpdatedAt,
+		&user.EnrollmentTokenID, &user.LastMessageSent, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (db *DB) GetUserByDeviceID(ctx context.Context, deviceID string) (*models.User, error) {
+	var user models.User
+	query := `SELECT id, username, user_type, device_id, online_status, last_seen,
+	          enrolled_at, enrollment_token_id, last_message_sent, created_at, updated_at
+	          FROM users WHERE device_id = $1`
+
+	err := db.Pool.QueryRow(ctx, query, deviceID).Scan(
+		&user.ID, &user.Username, &user.UserType, &user.DeviceID,
+		&user.OnlineStatus, &user.LastSeen, &user.EnrolledAt,
+		&user.EnrollmentTokenID, &user.LastMessageSent, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -49,10 +66,16 @@ func (db *DB) GetUserByUsername(ctx context.Context, username string) (*models.U
 
 func (db *DB) GetUsers(ctx context.Context, filter models.UserFilter) ([]models.User, error) {
 	query := `SELECT id, username, user_type, device_id, online_status, last_seen,
-	          enrolled_at, enrollment_token_id, created_at, updated_at
-	          FROM users WHERE user_type = 'mobile'`
+	          enrolled_at, enrollment_token_id, last_message_sent, created_at, updated_at
+	          FROM users WHERE 1=1`
 	args := []interface{}{}
 	argPos := 1
+
+	if filter.ExcludeUserID != "" {
+		query += fmt.Sprintf(" AND id != $%d", argPos)
+		args = append(args, filter.ExcludeUserID)
+		argPos++
+	}
 
 	if filter.Filter != "" {
 		query += fmt.Sprintf(" AND username ILIKE $%d", argPos)
@@ -80,7 +103,7 @@ func (db *DB) GetUsers(ctx context.Context, filter models.UserFilter) ([]models.
 		err := rows.Scan(
 			&user.ID, &user.Username, &user.UserType, &user.DeviceID,
 			&user.OnlineStatus, &user.LastSeen, &user.EnrolledAt,
-			&user.EnrollmentTokenID, &user.CreatedAt, &user.UpdatedAt,
+			&user.EnrollmentTokenID, &user.LastMessageSent, &user.CreatedAt, &user.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -93,8 +116,8 @@ func (db *DB) GetUsers(ctx context.Context, filter models.UserFilter) ([]models.
 
 func (db *DB) CreateUser(ctx context.Context, user *models.User) error {
 	query := `INSERT INTO users (id, username, user_type, device_id, online_status, 
-	          enrolled_at, enrollment_token_id, created_at, updated_at)
-	          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
+	          enrolled_at, enrollment_token_id, last_message_sent, created_at, updated_at)
+	          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
 
 	now := time.Now()
 	if user.ID == "" {
@@ -108,7 +131,22 @@ func (db *DB) CreateUser(ctx context.Context, user *models.User) error {
 	_, err := db.Pool.Exec(ctx, query,
 		user.ID, user.Username, user.UserType, user.DeviceID,
 		user.OnlineStatus, user.EnrolledAt, user.EnrollmentTokenID,
-		user.CreatedAt, user.UpdatedAt,
+		user.LastMessageSent, user.CreatedAt, user.UpdatedAt,
+	)
+	return err
+}
+
+func (db *DB) UpdateUser(ctx context.Context, user *models.User) error {
+	query := `UPDATE users SET 
+	          username = $2, user_type = $3, device_id = $4, online_status = $5,
+	          last_seen = $6, enrolled_at = $7, enrollment_token_id = $8,
+	          last_message_sent = $9, updated_at = NOW()
+	          WHERE id = $1`
+	
+	_, err := db.Pool.Exec(ctx, query,
+		user.ID, user.Username, user.UserType, user.DeviceID,
+		user.OnlineStatus, user.LastSeen, user.EnrolledAt,
+		user.EnrollmentTokenID, user.LastMessageSent,
 	)
 	return err
 }
@@ -258,32 +296,32 @@ func (db *DB) GetEnrollmentToken(ctx context.Context, token string) (*models.Enr
 	return &et, nil
 }
 
-func (db *DB) CompleteEnrollment(ctx context.Context, token, deviceID string) (string, error) {
-		tx, err := db.Pool.Begin(ctx)
-		if err != nil {
-			return "", err
-		}
-		defer tx.Rollback(ctx)
+func (db *DB) CompleteEnrollment(ctx context.Context, token, deviceID, username string) (string, error) {
+	tx, err := db.Pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
 
 	// Update enrollment token
 	updateQuery := `UPDATE enrollment_tokens 
 	                SET used_at = NOW(), device_id = $1, updated_at = NOW()
 	                WHERE token = $2 AND used_at IS NULL AND expires_at > NOW()`
-		result, err := tx.Exec(ctx, updateQuery, deviceID, token)
-		if err != nil {
-			return "", err
-		}
-		if result.RowsAffected() == 0 {
-			return "", fmt.Errorf("enrollment token not found or already used")
-		}
+	result, err := tx.Exec(ctx, updateQuery, deviceID, token)
+	if err != nil {
+		return "", err
+	}
+	if result.RowsAffected() == 0 {
+		return "", fmt.Errorf("enrollment token not found or already used")
+	}
 
 	// Get token details
 	var et models.EnrollmentToken
 	getQuery := `SELECT id, created_by, tenant_id FROM enrollment_tokens WHERE token = $1`
-		err = tx.QueryRow(ctx, getQuery, token).Scan(&et.ID, &et.CreatedBy, &et.TenantID)
-		if err != nil {
-			return "", err
-		}
+	err = tx.QueryRow(ctx, getQuery, token).Scan(&et.ID, &et.CreatedBy, &et.TenantID)
+	if err != nil {
+		return "", err
+	}
 
 	// Check if user with this device_id already exists
 	var userID string
@@ -293,19 +331,18 @@ func (db *DB) CompleteEnrollment(ctx context.Context, token, deviceID string) (s
 	
 	now := time.Now()
 	if err == nil {
-		// User already exists - update enrollment info
+		// User already exists - update enrollment info and username
 		userID = existingUserID
 		updateUserQuery := `UPDATE users 
-		                   SET enrolled_at = $1, enrollment_token_id = $2, updated_at = $3
-		                   WHERE id = $4`
-		_, err = tx.Exec(ctx, updateUserQuery, now, et.ID, now, userID)
+		                   SET username = $1, enrolled_at = $2, enrollment_token_id = $3, updated_at = $4
+		                   WHERE id = $5`
+		_, err = tx.Exec(ctx, updateUserQuery, username, now, et.ID, now, userID)
 		if err != nil {
 			return "", fmt.Errorf("failed to update existing user: %w", err)
 		}
 	} else if errors.Is(err, pgx.ErrNoRows) {
-		// User doesn't exist - create new one
+		// User doesn't exist - create new one with provided username
 		userID = uuid.New().String()
-		username := fmt.Sprintf("mobile_user_%s", deviceID[:8])
 		// Use INSERT ... ON CONFLICT to handle username conflicts
 		insertQuery := `INSERT INTO users (id, username, user_type, device_id, 
 		                  enrolled_at, enrollment_token_id, created_at, updated_at)
@@ -370,12 +407,12 @@ func (db *DB) GetPendingMessagesForDevice(ctx context.Context, deviceID string, 
 
 func (db *DB) GetSyncMetadata(ctx context.Context, deviceID string) (*models.SyncMetadata, error) {
 	var sm models.SyncMetadata
-	query := `SELECT id, device_id, last_sync_timestamp, pending_outgoing_count, 
+	query := `SELECT id, device_id, last_sync_timestamp, last_synced_lsn, pending_outgoing_count, 
 	          sync_status, created_at, updated_at
 	          FROM sync_metadata WHERE device_id = $1`
 
 	err := db.Pool.QueryRow(ctx, query, deviceID).Scan(
-		&sm.ID, &sm.DeviceID, &sm.LastSyncTimestamp,
+		&sm.ID, &sm.DeviceID, &sm.LastSyncTimestamp, &sm.LastSyncedLSN,
 		&sm.PendingOutgoingCount, &sm.SyncStatus,
 		&sm.CreatedAt, &sm.UpdatedAt,
 	)
@@ -386,11 +423,12 @@ func (db *DB) GetSyncMetadata(ctx context.Context, deviceID string) (*models.Syn
 }
 
 func (db *DB) UpdateSyncMetadata(ctx context.Context, sm *models.SyncMetadata) error {
-	query := `INSERT INTO sync_metadata (device_id, last_sync_timestamp, 
+	query := `INSERT INTO sync_metadata (device_id, last_sync_timestamp, last_synced_lsn,
 	          pending_outgoing_count, sync_status, created_at, updated_at)
-	          VALUES ($1, $2, $3, $4, $5, $6)
+	          VALUES ($1, $2, $3, $4, $5, $6, $7)
 	          ON CONFLICT (device_id) DO UPDATE SET
 	          last_sync_timestamp = EXCLUDED.last_sync_timestamp,
+	          last_synced_lsn = EXCLUDED.last_synced_lsn,
 	          pending_outgoing_count = EXCLUDED.pending_outgoing_count,
 	          sync_status = EXCLUDED.sync_status,
 	          updated_at = NOW()`
@@ -402,7 +440,7 @@ func (db *DB) UpdateSyncMetadata(ctx context.Context, sm *models.SyncMetadata) e
 	sm.UpdatedAt = now
 
 	_, err := db.Pool.Exec(ctx, query,
-		sm.DeviceID, sm.LastSyncTimestamp, sm.PendingOutgoingCount,
+		sm.DeviceID, sm.LastSyncTimestamp, sm.LastSyncedLSN, sm.PendingOutgoingCount,
 		sm.SyncStatus, sm.CreatedAt, sm.UpdatedAt,
 	)
 	return err

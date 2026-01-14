@@ -78,72 +78,22 @@ func (s *Service) CompleteEnrollment(ctx context.Context, req *models.CompleteEn
 		return nil, fmt.Errorf("enrollment token not found: %w", err)
 	}
 
+	// Validate username
+	if req.Username == "" {
+		return nil, fmt.Errorf("username is required")
+	}
+
 	// Complete enrollment (creates user and marks token as used)
-	userID, err := s.db.CompleteEnrollment(ctx, req.Token, req.DeviceID)
+	userID, err := s.db.CompleteEnrollment(ctx, req.Token, req.DeviceID, req.Username)
 	if err != nil {
 		return nil, fmt.Errorf("failed to complete enrollment: %w", err)
 	}
 
-	appInstructionsURL := fmt.Sprintf("http://localhost:%d/api/app-instructions", s.config.SSE.Port)
-
 	result := &models.EnrollmentResult{
-		UserID:             userID,
-		DeviceID:           req.DeviceID,
-		TenantID:           et.TenantID,
-		AppInstructionsURL: appInstructionsURL,
+		UserID:   userID,
+		DeviceID: req.DeviceID,
+		TenantID: et.TenantID,
 	}
 
 	return result, nil
-}
-
-func (s *Service) GetAppInstructions(ctx context.Context, deviceID string) (*models.AppInstructions, error) {
-	// Get user by device ID
-	users, err := s.db.GetUsers(ctx, models.UserFilter{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get users: %w", err)
-	}
-
-	var tenantID string
-	for _, user := range users {
-		if user.DeviceID != nil && *user.DeviceID == deviceID {
-			tenantID = s.config.Postgres.DB
-			break
-		}
-	}
-
-	if tenantID == "" {
-		return nil, fmt.Errorf("device not enrolled")
-	}
-
-	apiBaseURL := fmt.Sprintf("http://localhost:%d", s.config.SSE.Port)
-
-	instructions := &models.AppInstructions{
-		Version:    "1.0.0",
-		TenantID:   tenantID,
-		APIBaseURL: apiBaseURL,
-		Widgets: map[string]models.WidgetConfig{
-			"inbox": {
-				Type:    "remote_widget",
-				URL:     fmt.Sprintf("%s/widgets/inbox.json", apiBaseURL),
-				Version: "1.0.0",
-			},
-			"compose": {
-				Type:    "remote_widget",
-				URL:     fmt.Sprintf("%s/widgets/compose.json", apiBaseURL),
-				Version: "1.0.0",
-			},
-			"message_detail": {
-				Type:    "remote_widget",
-				URL:     fmt.Sprintf("%s/widgets/message_detail.json", apiBaseURL),
-				Version: "1.0.0",
-			},
-		},
-		SyncConfig: models.SyncConfig{
-			BatchSize:           s.config.Sync.BatchSize,
-			Compression:         s.config.Sync.Compression,
-			SyncIntervalSeconds: 300,
-		},
-	}
-
-	return instructions, nil
 }

@@ -135,7 +135,19 @@ config/
 - Prepared statements
 - Query builders for complex queries
 - Batch operations
-- WAL-based change detection helpers
+- WAL-based change detection queries
+
+**Migrations (`migrations.go`):**
+- Schema versioning
+- Automatic migration on startup
+- Adds `last_synced_lsn` column to `sync_metadata` table
+- Creates indexes for LSN tracking
+
+**Replication (`replication.go`):**
+- Logical replication slot management
+- Creates replication slots per tenant
+- Monitors slot health and lag
+- Handles slot lifecycle
 
 ### 3. Sync Manager (`internal/sync/`)
 
@@ -146,11 +158,30 @@ config/
 - Handles sync scheduling
 - Error recovery
 
-**Incoming Sync (`incoming.go`):**
+**WAL Reader (`wal_reader.go`):**
+- Reads changes from PostgreSQL WAL using logical replication
+- Parses pgoutput protocol messages
+- Extracts INSERT/UPDATE/DELETE operations
+- Filters changes by table name and schema
+
+**Change Tracker (`change_tracker.go`):**
+- Tracks WAL changes per device
+- Filters changes by recipient_id
+- Maintains change queues per device
+- Converts WAL changes to message models
+
+**WAL Service (`wal_service.go`):**
+- Manages WAL reading in background
+- Creates and manages replication slots
+- Coordinates WAL change reading
+- Handles replication connection lifecycle
+
+**Incoming Sync (`manager.go`):**
+- Supports both WAL-based and polling-based sync (configurable)
 - Fetches pending messages for mobile device
-- Filters by device_id and status
+- Filters by device_id and LSN (WAL mode) or status (polling mode)
+- Updates sync metadata with LSN
 - Applies compression/decompression
-- Updates sync metadata
 - Returns batch of messages
 
 **Outgoing Sync (`outgoing.go`):**

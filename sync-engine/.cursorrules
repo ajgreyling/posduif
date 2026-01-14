@@ -29,10 +29,14 @@
 cmd/sync-engine/     # Application entry point
 internal/            # Private application code
   api/              # HTTP handlers, middleware, SSE
-  database/         # PostgreSQL connection and queries
+  database/         # PostgreSQL connection, queries, migrations, replication
   models/           # Data models
   enrollment/       # Enrollment service
   sync/             # Sync logic
+    wal_reader.go   # WAL change reader using logical replication
+    change_tracker.go # Device-specific change tracking
+    wal_service.go   # WAL service for background reading
+    manager.go       # Sync manager (WAL + polling modes)
   message/          # Message service
   redis/            # Redis client
   compression/      # Compression utilities
@@ -54,10 +58,17 @@ config/             # Configuration files
 ## Database
 
 - Use prepared statements to prevent SQL injection
-- Support schema-per-tenant isolation
+- Support database-per-tenant isolation
 - Implement connection pooling (configurable pool size)
 - Use migrations for schema changes
 - Support query timeouts
+- **WAL-Based Change Detection**:
+  - Use PostgreSQL 18+ logical replication for change detection
+  - Create logical replication slots per tenant automatically
+  - Track changes using Log Sequence Numbers (LSN)
+  - Parse pgoutput protocol messages for WAL changes
+  - Filter changes by table name and recipient
+  - Update sync metadata with LSN positions
 
 ## API Design
 

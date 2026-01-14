@@ -37,7 +37,7 @@ if ! docker ps | grep -q posduif-postgres-test; then
 version: '3.8'
 services:
   postgres:
-    image: postgres:16
+    image: postgres:18
     container_name: posduif-postgres-test
     environment:
       POSTGRES_USER: posduif

@@ -114,5 +114,25 @@ class APIClient {
       rethrow;
     }
   }
+
+  // Users endpoint
+  Future<List<dynamic>> getUsers({String? filter, bool? status}) async {
+    debugPrint('[API_CLIENT] getUsers called');
+    _ensureConfigured();
+    final queryParams = <String, dynamic>{};
+    if (filter != null) queryParams['filter'] = filter;
+    if (status != null) queryParams['status'] = status.toString();
+    
+    debugPrint('[API_CLIENT] Making GET request to: /api/users');
+    try {
+      final response = await _dio.get('/api/users', queryParameters: queryParams);
+      debugPrint('[API_CLIENT] getUsers success');
+      final users = response.data['users'] as List<dynamic>? ?? [];
+      return users;
+    } catch (e) {
+      debugPrint('[API_CLIENT] getUsers error: $e');
+      rethrow;
+    }
+  }
 }
 

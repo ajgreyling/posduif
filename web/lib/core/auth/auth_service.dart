@@ -9,12 +9,18 @@ class AuthService {
 
   Future<Map<String, dynamic>> login(String username, String password) async {
     try {
-      final response = await apiClient.login(username, password);
-      final token = response['token'] as String;
-      final user = response['user'] as Map<String, dynamic>;
+      // No password needed - username only
+      final response = await apiClient.login(username);
+      final user = response as Map<String, dynamic>;
 
-      apiClient.setToken(token);
+      // Store user ID in header for subsequent requests
+      apiClient.setUserId(user['user_id'] as String);
       _currentUser = user;
+
+      // Store user info
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('current_user_id', user['user_id'] as String);
+      await prefs.setString('current_username', user['username'] as String);
 
       return response;
     } catch (e) {
@@ -23,12 +29,15 @@ class AuthService {
   }
 
   Future<void> logout() async {
-    apiClient.clearToken();
+    apiClient.clearUserId();
     _currentUser = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('current_user_id');
+    await prefs.remove('current_username');
   }
 
   bool isAuthenticated() {
-    return _currentUser != null || apiClient.token != null;
+    return _currentUser != null || apiClient.userId != null;
   }
 
   Map<String, dynamic>? getCurrentUser() {
@@ -36,18 +45,21 @@ class AuthService {
   }
 
   String? getToken() {
-    return apiClient.token;
+    // Web API uses user ID, not token
+    return apiClient.userId;
   }
 
   Future<void> loadStoredAuth() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
-    if (token != null) {
-      apiClient.setToken(token);
-      // TODO: Load user from token or API
-      final userJson = prefs.getString('current_user');
-      if (userJson != null) {
-        // Parse user from JSON if stored
+    final userId = prefs.getString('current_user_id');
+    if (userId != null) {
+      apiClient.setUserId(userId);
+      final username = prefs.getString('current_username');
+      if (username != null) {
+        _currentUser = {
+          'user_id': userId,
+          'username': username,
+        };
       }
     }
   }

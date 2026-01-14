@@ -25,13 +25,13 @@ apt-get install -y \
     unzip \
     sqlite3
 
-# Install PostgreSQL 16
-echo "Installing PostgreSQL 16..."
+# Install PostgreSQL 18
+echo "Installing PostgreSQL 18..."
 if ! command -v psql &> /dev/null; then
     sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
     wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
     apt-get update
-    apt-get install -y postgresql-16 postgresql-contrib-16
+    apt-get install -y postgresql-18 postgresql-contrib-18
     systemctl enable postgresql
     systemctl start postgresql
 fi

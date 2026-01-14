@@ -5,6 +5,7 @@ class User {
   final String? deviceId;
   final bool onlineStatus;
   final DateTime? lastSeen;
+  final String? lastMessageSent;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -15,6 +16,7 @@ class User {
     this.deviceId,
     required this.onlineStatus,
     this.lastSeen,
+    this.lastMessageSent,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -29,6 +31,7 @@ class User {
       lastSeen: json['last_seen'] != null
           ? DateTime.parse(json['last_seen'])
           : null,
+      lastMessageSent: json['last_message_sent'],
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
     );
@@ -42,6 +45,7 @@ class User {
       'device_id': deviceId,
       'online_status': onlineStatus,
       'last_seen': lastSeen?.toIso8601String(),
+      'last_message_sent': lastMessageSent,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };

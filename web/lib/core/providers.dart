@@ -2,9 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'api/api_client.dart';
 import 'auth/auth_service.dart';
 
-// API Client Provider
+// API Client Provider (web API service on port 8081)
 final apiClientProvider = Provider<APIClient>((ref) {
-  return APIClient(baseUrl: 'http://localhost:8080');
+  return APIClient(baseUrl: 'http://localhost:8081');
 });
 
 // Auth Service Provider
@@ -35,23 +35,60 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = AuthState.loading();
     try {
       final response = await authService.login(username, password);
-      state = AuthState.authenticated(response['user']);
+      state = AuthState.authenticated(response);
     } catch (e) {
       // Extract error message from DioException if present
       String errorMessage = 'Login failed';
       
       if (e.toString().contains('DioException')) {
-        // Try to extract error message from response
+        // Check for specific error types
         if (e.toString().contains('Invalid credentials') || 
-            e.toString().contains('401')) {
+            e.toString().contains('401') ||
+            e.toString().contains('User not found')) {
           errorMessage = 'Invalid username or password';
+        } else if (e.toString().contains('500')) {
+          // Try to extract error message from response data
+          try {
+            final dioError = e as dynamic;
+            if (dioError.response?.data != null) {
+              final errorData = dioError.response.data;
+              if (errorData is Map && errorData.containsKey('error')) {
+                errorMessage = errorData['error'] as String;
+              } else if (errorData is String) {
+                errorMessage = errorData;
+              } else {
+                errorMessage = 'Server error. Please try again later.';
+              }
+            } else {
+              errorMessage = 'Server error. Please ensure the database is running.';
+            }
+          } catch (_) {
+            errorMessage = 'Server error. Please ensure the database is running.';
+          }
+        } else if (e.toString().contains('503') || 
+                   e.toString().contains('Service Unavailable') ||
+                   e.toString().contains('Database connection')) {
+          errorMessage = 'Database connection unavailable. Please ensure the database is running.';
         } else if (e.toString().contains('connection') || 
                    e.toString().contains('Connection refused') ||
                    e.toString().contains('Failed host lookup')) {
           errorMessage = 'Connection error. Please check if the server is running.';
         } else {
-          // Try to get a more specific error message
-          errorMessage = e.toString();
+          // Try to extract error message from response
+          try {
+            final dioError = e as dynamic;
+            if (dioError.response?.data != null) {
+              final errorData = dioError.response.data;
+              if (errorData is Map && errorData.containsKey('error')) {
+                errorMessage = errorData['error'] as String;
+              } else if (errorData is String) {
+                errorMessage = errorData;
+              }
+            }
+          } catch (_) {
+            // Fallback to generic error
+            errorMessage = 'Login failed. Please try again.';
+          }
         }
       } else {
         errorMessage = e.toString();

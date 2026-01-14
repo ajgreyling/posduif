@@ -26,11 +26,13 @@ class EnrollmentService {
   Future<Map<String, dynamic>> completeEnrollment({
     required String token,
     required String deviceId,
+    required String username,
     Map<String, dynamic>? deviceInfo,
   }) async {
     debugPrint('[ENROLLMENT] completeEnrollment called');
     debugPrint('[ENROLLMENT] token: $token');
     debugPrint('[ENROLLMENT] deviceId: $deviceId');
+    debugPrint('[ENROLLMENT] username: $username');
     try {
       final url = '/api/enrollment/complete';
       debugPrint('[ENROLLMENT] Making POST request to: $url');
@@ -40,6 +42,7 @@ class EnrollmentService {
         data: {
           'token': token,
           'device_id': deviceId,
+          'username': username,
           'device_info': deviceInfo ?? {},
         },
       );
@@ -51,81 +54,15 @@ class EnrollmentService {
       await _prefs.setString('device_id', deviceId);
       await _prefs.setString('tenant_id', response.data['tenant_id']);
       await _prefs.setString('user_id', response.data['user_id']);
+      await _prefs.setString('username', username);
       debugPrint('[ENROLLMENT] Stored device_id: $deviceId');
       debugPrint('[ENROLLMENT] Stored tenant_id: ${response.data['tenant_id']}');
       debugPrint('[ENROLLMENT] Stored user_id: ${response.data['user_id']}');
+      debugPrint('[ENROLLMENT] Stored username: $username');
       
       return response.data;
     } catch (e) {
       debugPrint('[ENROLLMENT] Error completing enrollment: $e');
-      rethrow;
-    }
-  }
-
-  Future<Map<String, dynamic>> getAppInstructions(String deviceId) async {
-    debugPrint('[ENROLLMENT] getAppInstructions called');
-    debugPrint('[ENROLLMENT] deviceId: $deviceId');
-    try {
-      final url = '/api/app-instructions';
-      debugPrint('[ENROLLMENT] Making GET request to: $url');
-      debugPrint('[ENROLLMENT] Dio baseUrl: ${_dio.options.baseUrl}');
-      final response = await _dio.get(
-        url,
-        options: Options(
-          headers: {'X-Device-ID': deviceId},
-        ),
-      );
-      
-      debugPrint('[ENROLLMENT] App instructions retrieved successfully');
-      debugPrint('[ENROLLMENT] Response status: ${response.statusCode}');
-      debugPrint('[ENROLLMENT] Response api_base_url: ${response.data['api_base_url']}');
-      debugPrint('[ENROLLMENT] Response widgets: ${response.data['widgets']?.keys}');
-      
-      // Store app instructions as JSON string
-      final instructionsJson = response.data.toString();
-      await _prefs.setString('app_instructions', instructionsJson);
-      debugPrint('[ENROLLMENT] Stored app instructions');
-      
-      // Store app_instructions_url if provided in response
-      if (response.data['app_instructions_url'] != null) {
-        final appInstructionsUrl = response.data['app_instructions_url'] as String;
-        // Only save if it's not localhost
-        if (!appInstructionsUrl.contains('localhost') && !appInstructionsUrl.contains('127.0.0.1')) {
-          await _prefs.setString('app_instructions_url', appInstructionsUrl);
-          debugPrint('[ENROLLMENT] Stored app_instructions_url: $appInstructionsUrl');
-        } else {
-          debugPrint('[ENROLLMENT] Skipped storing app_instructions_url (contains localhost)');
-        }
-      }
-      
-      // Don't overwrite api_base_url if it's already set - the one from QR code is correct
-      // The backend returns localhost which won't work from mobile device
-      // Keep using the API base URL extracted from the enrollment QR code
-      final currentApiBaseUrl = _prefs.getString('api_base_url');
-      debugPrint('[ENROLLMENT] Current api_base_url: $currentApiBaseUrl');
-      debugPrint('[ENROLLMENT] Backend returned api_base_url: ${response.data['api_base_url']}');
-      if (currentApiBaseUrl == null) {
-        // Only set if not already set (shouldn't happen, but be safe)
-        final backendUrl = response.data['api_base_url'] as String;
-        // Only save if it's not localhost
-        if (!backendUrl.contains('localhost') && !backendUrl.contains('127.0.0.1')) {
-          await _prefs.setString('api_base_url', backendUrl);
-          debugPrint('[ENROLLMENT] Set api_base_url from backend response: $backendUrl');
-        } else {
-          debugPrint('[ENROLLMENT] Skipped setting api_base_url (backend returned localhost)');
-        }
-      } else {
-        debugPrint('[ENROLLMENT] Keeping existing api_base_url (not overwriting)');
-      }
-      
-      return response.data;
-    } catch (e) {
-      debugPrint('[ENROLLMENT] Error getting app instructions: $e');
-      if (e is DioException) {
-        debugPrint('[ENROLLMENT] DioException type: ${e.type}');
-        debugPrint('[ENROLLMENT] DioException response: ${e.response?.statusCode}');
-        debugPrint('[ENROLLMENT] DioException message: ${e.message}');
-      }
       rethrow;
     }
   }
@@ -144,6 +81,24 @@ class EnrollmentService {
 
   String? getApiBaseUrl() {
     return _prefs.getString('api_base_url');
+  }
+
+  /// Clear all enrollment-related data from SharedPreferences
+  /// This is useful for debugging (Hot Restart) or resetting enrollment
+  static Future<void> clearEnrollmentData() async {
+    debugPrint('[ENROLLMENT] Clearing all enrollment data...');
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('api_base_url');
+      await prefs.remove('device_id');
+      await prefs.remove('tenant_id');
+      await prefs.remove('user_id');
+      await prefs.remove('username');
+      debugPrint('[ENROLLMENT] All enrollment data cleared successfully');
+    } catch (e) {
+      debugPrint('[ENROLLMENT] Error clearing enrollment data: $e');
+      rethrow;
+    }
   }
 }
 

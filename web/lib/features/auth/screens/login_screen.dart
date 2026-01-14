@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/providers.dart';
+import '../../../core/api/api_client.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -11,32 +12,59 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
+  String? _selectedUsername;
+  List<String> _webUsernames = [];
+  bool _isLoadingUsers = true;
+  String? _usersError;
 
   @override
-  void dispose() {
-    _usernameController.dispose();
-    _passwordController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadAvailableUsers();
   }
 
-  Future<void> _handleLogin() async {
-    print('[LOGIN] Login button clicked');
-    
-    if (!_formKey.currentState!.validate()) {
-      print('[LOGIN] Form validation failed');
-      return;
+  Future<void> _loadAvailableUsers() async {
+    setState(() {
+      _isLoadingUsers = true;
+      _usersError = null;
+    });
+
+    try {
+      final apiClient = ref.read(apiClientProvider);
+      final users = await apiClient.getAvailableWebUsers();
+      
+      setState(() {
+        _webUsernames = users
+            .map((user) => user['username'] as String? ?? '')
+            .where((username) => username.isNotEmpty)
+            .toList();
+        _isLoadingUsers = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingUsers = false;
+        if (e.toString().contains('500') || 
+            e.toString().contains('Service Unavailable') ||
+            e.toString().contains('Database connection')) {
+          _usersError = 'Database connection unavailable. Please ensure the database is running.';
+        } else if (e.toString().contains('connection') || 
+                   e.toString().contains('Connection refused') ||
+                   e.toString().contains('Failed host lookup')) {
+          _usersError = 'Unable to connect to server. Please check if the web API is running.';
+        } else {
+          _usersError = 'Failed to load available users. Please try again.';
+        }
+      });
     }
-    
-    print('[LOGIN] Calling login with username: ${_usernameController.text.trim()}');
-    
+  }
+
+  Future<void> _selectUsername(String username) async {
+    setState(() {
+      _selectedUsername = username;
+    });
+
     final authNotifier = ref.read(authStateProvider.notifier);
-    await authNotifier.login(
-      _usernameController.text.trim(),
-      _passwordController.text,
-    );
+    await authNotifier.login(username, ''); // No password
 
     // Wait for the next frame to ensure state is updated
     if (mounted) {
@@ -82,73 +110,91 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       body: Center(
-        child: SizedBox(
-          width: 400,
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Posduif Web',
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
-                    const SizedBox(height: 32),
-                    TextFormField(
-                      controller: _usernameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Username',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter username';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _passwordController,
-                      decoration: const InputDecoration(
-                        labelText: 'Password',
-                        border: OutlineInputBorder(),
-                      ),
-                      obscureText: true,
-                      textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) => _handleLogin(),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter password';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: authState.isLoading ? null : _handleLogin,
-                        child: authState.isLoading
-                            ? const CircularProgressIndicator()
-                            : const Text('Login'),
-                      ),
-                    ),
-                    if (authState.error != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: Text(
-                          authState.error!,
-                          style: TextStyle(color: Theme.of(context).colorScheme.error),
-                        ),
-                      ),
-                  ],
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.person_outline,
+                size: 80,
+                color: Colors.blue,
+              ),
+              const SizedBox(height: 32),
+              const Text(
+                'Choose your username',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ),
+              const SizedBox(height: 48),
+              if (authState.error != null)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.red[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    authState.error!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
+              if (_usersError != null)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        _usersError!,
+                        style: const TextStyle(color: Colors.orange),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: _loadAvailableUsers,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              if (_isLoadingUsers)
+                const CircularProgressIndicator()
+              else if (_webUsernames.isEmpty && _usersError == null)
+                const Text(
+                  'No users available. Please contact administrator.',
+                  style: TextStyle(color: Colors.grey),
+                )
+              else if (authState.isLoading)
+                const CircularProgressIndicator()
+              else
+                ..._webUsernames.map((username) => Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: SizedBox(
+                        width: 400,
+                        child: ElevatedButton(
+                          onPressed: () => _selectUsername(username),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            username,
+                            style: const TextStyle(fontSize: 18),
+                          ),
+                        ),
+                      ),
+                    )),
+            ],
           ),
         ),
       ),

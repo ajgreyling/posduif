@@ -57,12 +57,20 @@ type SSEConfig struct {
 }
 
 type SyncConfig struct {
-	BatchSize            int    `yaml:"batch_size"`
-	Compression          bool   `yaml:"compression"`
-	CompressionThreshold int    `yaml:"compression_threshold"`
-	ConflictResolution   string `yaml:"conflict_resolution"`
-	RetryAttempts        int    `yaml:"retry_attempts"`
-	RetryBackoff         string `yaml:"retry_backoff"`
+	BatchSize            int        `yaml:"batch_size"`
+	Compression          bool       `yaml:"compression"`
+	CompressionThreshold int        `yaml:"compression_threshold"`
+	ConflictResolution   string     `yaml:"conflict_resolution"`
+	RetryAttempts        int        `yaml:"retry_attempts"`
+	RetryBackoff         string     `yaml:"retry_backoff"`
+	WAL                  WALConfig  `yaml:"wal"`
+}
+
+type WALConfig struct {
+	Enabled      bool   `yaml:"enabled"`
+	SlotName     string `yaml:"slot_name"`     // If empty, auto-generated from tenant DB name
+	BatchSize    int    `yaml:"batch_size"`    // Number of changes to read per batch
+	ReadInterval string `yaml:"read_interval"` // How often to read WAL changes
 }
 
 type AuthConfig struct {
@@ -105,6 +113,12 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if config.Sync.BatchSize == 0 {
 		config.Sync.BatchSize = 100
+	}
+	if config.Sync.WAL.BatchSize == 0 {
+		config.Sync.WAL.BatchSize = 100
+	}
+	if config.Sync.WAL.ReadInterval == "" {
+		config.Sync.WAL.ReadInterval = "1s"
 	}
 	if config.Auth.JWTExpiration == 0 {
 		config.Auth.JWTExpiration = 3600

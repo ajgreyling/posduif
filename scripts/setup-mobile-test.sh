@@ -26,13 +26,253 @@ echo ""
 echo -e "${YELLOW}Checking Docker Compose services...${NC}"
 cd "$PROJECT_ROOT/infrastructure"
 
-if ! docker-compose ps | grep -q "Up" && ! docker compose ps | grep -q "Up"; then
-    echo -e "${YELLOW}Starting Docker Compose services...${NC}"
-    docker-compose up -d > /dev/null 2>&1 || docker compose up -d > /dev/null 2>&1
+# Check if PostgreSQL container is running
+POSTGRES_RUNNING=$(docker ps --format "{{.Names}}" | grep -i postgres || echo "")
+POSTGRES_CONTAINER_NAME=""
+
+if [ -z "$POSTGRES_RUNNING" ]; then
+    echo -e "${YELLOW}PostgreSQL container not running. Starting Docker Compose services...${NC}"
+    docker-compose up -d postgres redis web-api > /dev/null 2>&1 || docker compose up -d postgres redis web-api > /dev/null 2>&1
     echo "Waiting for services to be ready..."
     sleep 10
+    
+    # Wait for PostgreSQL to be healthy
+    echo -e "${YELLOW}Waiting for PostgreSQL to be ready...${NC}"
+    MAX_WAIT=60
+    WAITED=0
+    POSTGRES_CONTAINER_NAME="posduif-postgres"
+    export POSTGRES_CONTAINER_NAME
+    while [ $WAITED -lt $MAX_WAIT ]; do
+        if docker exec "$POSTGRES_CONTAINER_NAME" pg_isready -U posduif > /dev/null 2>&1; then
+            echo -e "${GREEN}✓ PostgreSQL is ready${NC}"
+            break
+        fi
+        sleep 2
+        WAITED=$((WAITED + 2))
+    done
+    
+    if [ $WAITED -ge $MAX_WAIT ]; then
+        echo -e "${RED}✗ PostgreSQL failed to start within $MAX_WAIT seconds${NC}"
+        
+        # Check if it's a PostgreSQL 18 volume compatibility issue
+        if docker logs "$POSTGRES_CONTAINER_NAME" 2>&1 | grep -q "PostgreSQL data in:"; then
+            echo -e "${YELLOW}Detected PostgreSQL 18 volume compatibility issue${NC}"
+            echo -e "${YELLOW}PostgreSQL 18 requires a different volume mount path${NC}"
+            echo -e "${YELLOW}Removing old volume to fix compatibility...${NC}"
+            
+            # Stop and remove the container
+            docker stop "$POSTGRES_CONTAINER_NAME" > /dev/null 2>&1 || true
+            docker rm "$POSTGRES_CONTAINER_NAME" > /dev/null 2>&1 || true
+            
+            # Find and remove the old postgres volume (try different possible names)
+            cd "$PROJECT_ROOT/infrastructure"
+            for vol_name in posduif_postgres_data infrastructure_postgres_data; do
+                if docker volume inspect "$vol_name" > /dev/null 2>&1; then
+                    echo -e "${YELLOW}Removing volume: $vol_name${NC}"
+                    docker volume rm "$vol_name" > /dev/null 2>&1 || true
+                fi
+            done
+            
+            echo -e "${YELLOW}Restarting PostgreSQL with new volume...${NC}"
+            cd "$PROJECT_ROOT/infrastructure"
+            docker-compose up -d postgres > /dev/null 2>&1 || docker compose up -d postgres > /dev/null 2>&1
+            
+            # Wait again
+            WAITED=0
+            while [ $WAITED -lt $MAX_WAIT ]; do
+                if docker exec "$POSTGRES_CONTAINER_NAME" pg_isready -U posduif > /dev/null 2>&1; then
+                    echo -e "${GREEN}✓ PostgreSQL is ready${NC}"
+                    break
+                fi
+                sleep 2
+                WAITED=$((WAITED + 2))
+            done
+            
+            if [ $WAITED -ge $MAX_WAIT ]; then
+                echo -e "${RED}✗ PostgreSQL still failed to start after volume fix${NC}"
+                echo -e "${YELLOW}  Check logs: docker logs $POSTGRES_CONTAINER_NAME${NC}"
+                exit 1
+            fi
+        else
+            echo -e "${YELLOW}  Check logs: docker logs $POSTGRES_CONTAINER_NAME${NC}"
+            exit 1
+        fi
+    fi
+    POSTGRES_RUNNING="$POSTGRES_CONTAINER_NAME"
 else
     echo -e "${GREEN}✓ Docker Compose services are running${NC}"
+    # Set container name from running container
+    POSTGRES_CONTAINER_NAME="$POSTGRES_RUNNING"
+    export POSTGRES_CONTAINER_NAME
+fi
+
+# Check if web-api container is running
+WEB_API_CONTAINER_NAME="posduif-web-api"
+if docker ps --format "{{.Names}}" | grep -q "^${WEB_API_CONTAINER_NAME}$"; then
+    echo -e "${GREEN}✓ Web API container is running${NC}"
+    # Wait for web-api to be ready (check if port 8081 is accessible)
+    echo -e "${YELLOW}Waiting for web-api to be ready...${NC}"
+    MAX_WAIT=30
+    WAITED=0
+    while [ $WAITED -lt $MAX_WAIT ]; do
+        if curl -s http://localhost:8081/api/auth/login > /dev/null 2>&1 || lsof -ti:8081 > /dev/null 2>&1; then
+            echo -e "${GREEN}✓ Web API is ready${NC}"
+            break
+        fi
+        sleep 2
+        WAITED=$((WAITED + 2))
+    done
+    
+    if [ $WAITED -ge $MAX_WAIT ]; then
+        echo -e "${YELLOW}⚠ Web API may not be fully ready yet${NC}"
+        echo -e "${YELLOW}  Check logs: docker logs $WEB_API_CONTAINER_NAME${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠ Web API container not found. Starting it...${NC}"
+    cd "$PROJECT_ROOT/infrastructure"
+    docker-compose up -d web-api > /dev/null 2>&1 || docker compose up -d web-api > /dev/null 2>&1
+    sleep 5
+    
+    # Wait for web-api to be ready
+    echo -e "${YELLOW}Waiting for web-api to be ready...${NC}"
+    MAX_WAIT=30
+    WAITED=0
+    while [ $WAITED -lt $MAX_WAIT ]; do
+        if curl -s http://localhost:8081/api/auth/login > /dev/null 2>&1 || lsof -ti:8081 > /dev/null 2>&1; then
+            echo -e "${GREEN}✓ Web API is ready${NC}"
+            break
+        fi
+        sleep 2
+        WAITED=$((WAITED + 2))
+    done
+    
+    if [ $WAITED -ge $MAX_WAIT ]; then
+        echo -e "${YELLOW}⚠ Web API may not be fully ready yet${NC}"
+        echo -e "${YELLOW}  Check logs: docker logs $WEB_API_CONTAINER_NAME${NC}"
+    fi
+fi
+
+# Function to check and fix replication permissions
+# Sets POSTGRES_CONTAINER_NAME as a global variable for use later in the script
+check_and_fix_replication_permissions() {
+    echo -e "${YELLOW}Checking PostgreSQL replication permissions...${NC}"
+    
+    # Check if PostgreSQL container exists and is running
+    POSTGRES_CONTAINER=$(docker ps --format "{{.Names}}" | grep -i postgres | head -1)
+    # Export container name for use later in script
+    export POSTGRES_CONTAINER_NAME="$POSTGRES_CONTAINER"
+    
+    # If no container found, check if it exists but is stopped
+    if [ -z "$POSTGRES_CONTAINER" ]; then
+        POSTGRES_CONTAINER=$(docker ps -a --format "{{.Names}}" | grep -i postgres | head -1)
+        if [ -n "$POSTGRES_CONTAINER" ]; then
+            echo -e "${YELLOW}PostgreSQL container found but not running. Starting it...${NC}"
+            docker start "$POSTGRES_CONTAINER" > /dev/null 2>&1
+            sleep 3
+        fi
+    fi
+    
+    # Check if running in Docker or locally
+    if [ -n "$POSTGRES_CONTAINER" ] && docker ps --format "{{.Names}}" | grep -q "$POSTGRES_CONTAINER" 2>/dev/null; then
+        # Docker environment
+        echo -e "${YELLOW}Detected Docker environment (container: $POSTGRES_CONTAINER)${NC}"
+        
+        # Check if posduif user has REPLICATION privilege
+        # When POSTGRES_USER is set to posduif, posduif is the superuser (not postgres)
+        # Connect to postgres database (system database) or tenant_1
+        HAS_REPLICATION=$(docker exec "$POSTGRES_CONTAINER" psql -U posduif -d postgres -tAc "SELECT rolreplication FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || docker exec "$POSTGRES_CONTAINER" psql -U posduif -d tenant_1 -tAc "SELECT rolreplication FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || echo "f")
+        
+        if [ "$HAS_REPLICATION" = "t" ]; then
+            echo -e "${GREEN}✓ posduif user already has REPLICATION privileges${NC}"
+        else
+            echo -e "${YELLOW}Granting REPLICATION privileges to posduif user...${NC}"
+            # Try postgres database first, fallback to tenant_1
+            if docker exec -i "$POSTGRES_CONTAINER" psql -U posduif -d postgres <<EOF > /dev/null 2>&1
+ALTER USER posduif WITH REPLICATION;
+EOF
+            then
+                echo -e "${GREEN}✓ REPLICATION privileges granted${NC}"
+            elif docker exec -i "$POSTGRES_CONTAINER" psql -U posduif -d tenant_1 <<EOF > /dev/null 2>&1
+ALTER USER posduif WITH REPLICATION;
+EOF
+            then
+                echo -e "${GREEN}✓ REPLICATION privileges granted${NC}"
+            else
+                echo -e "${RED}✗ Failed to grant REPLICATION privileges${NC}"
+                echo -e "${YELLOW}  Make sure PostgreSQL container is running and accessible${NC}"
+                return 1
+            fi
+        fi
+        
+        # Verify the privilege was granted
+        HAS_REPLICATION=$(docker exec "$POSTGRES_CONTAINER" psql -U posduif -d postgres -tAc "SELECT rolreplication FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || docker exec "$POSTGRES_CONTAINER" psql -U posduif -d tenant_1 -tAc "SELECT rolreplication FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || echo "f")
+        if [ "$HAS_REPLICATION" != "t" ]; then
+            echo -e "${RED}✗ Verification failed: posduif user does not have REPLICATION privileges${NC}"
+            return 1
+        fi
+        
+    else
+        # Local PostgreSQL installation
+        echo -e "${YELLOW}Detected local PostgreSQL installation${NC}"
+        
+        # Check if posduif user has REPLICATION privilege
+        HAS_REPLICATION=$(sudo -u postgres psql -tAc "SELECT rolreplication FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || echo "f")
+        
+        if [ "$HAS_REPLICATION" = "t" ]; then
+            echo -e "${GREEN}✓ posduif user already has REPLICATION privileges${NC}"
+        else
+            echo -e "${YELLOW}Granting REPLICATION privileges to posduif user...${NC}"
+            if sudo -u postgres psql <<EOF > /dev/null 2>&1
+ALTER USER posduif WITH REPLICATION;
+EOF
+            then
+                echo -e "${GREEN}✓ REPLICATION privileges granted${NC}"
+            else
+                echo -e "${RED}✗ Failed to grant REPLICATION privileges${NC}"
+                echo -e "${YELLOW}  Make sure you have sudo access and PostgreSQL is running${NC}"
+                return 1
+            fi
+        fi
+        
+        # Verify the privilege was granted
+        HAS_REPLICATION=$(sudo -u postgres psql -tAc "SELECT rolreplication FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null || echo "f")
+        if [ "$HAS_REPLICATION" != "t" ]; then
+            echo -e "${RED}✗ Verification failed: posduif user does not have REPLICATION privileges${NC}"
+            return 1
+        fi
+    fi
+    
+    return 0
+}
+
+# Check and fix replication permissions
+if ! check_and_fix_replication_permissions; then
+    echo -e "${RED}✗ Failed to set up replication permissions${NC}"
+    echo -e "${YELLOW}  The sync engine requires REPLICATION privileges to create logical replication slots${NC}"
+    echo -e "${YELLOW}  You can manually fix this by running: scripts/fix-replication-permissions.sh${NC}"
+    exit 1
+fi
+
+# Verify PostgreSQL connection and permissions for sync engine
+echo -e "${YELLOW}Verifying PostgreSQL connection and permissions...${NC}"
+if [ -n "$POSTGRES_CONTAINER_NAME" ]; then
+    # Test connection and verify replication privileges
+    if docker exec "$POSTGRES_CONTAINER_NAME" psql -U posduif -d tenant_1 -tAc "SELECT rolreplication FROM pg_roles WHERE rolname = 'posduif'" 2>/dev/null | grep -q "t"; then
+        # Verify we can query the database (simulating sync engine connection)
+        if docker exec "$POSTGRES_CONTAINER_NAME" psql -U posduif -d tenant_1 -tAc "SELECT 1" > /dev/null 2>&1; then
+            echo -e "${GREEN}✓ PostgreSQL connection verified (Docker container: $POSTGRES_CONTAINER_NAME)${NC}"
+            echo -e "${GREEN}✓ Replication privileges confirmed${NC}"
+        else
+            echo -e "${RED}✗ Failed to verify PostgreSQL connection${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${RED}✗ Replication privileges not found for posduif user${NC}"
+        exit 1
+    fi
+else
+    echo -e "${YELLOW}⚠ Could not verify PostgreSQL connection (container not found)${NC}"
+    echo -e "${YELLOW}  Sync engine will attempt to connect via localhost:5432${NC}"
 fi
 
 # Check if sync engine is running and kill any old instances
@@ -138,11 +378,22 @@ fi
 # Create test web user if needed
 echo -e "${YELLOW}Setting up test user...${NC}"
 cd "$PROJECT_ROOT"
-PGPASSWORD=secret psql -h localhost -U posduif -d tenant_1 -c "
+
+# Ensure we have the PostgreSQL container name
+if [ -z "$POSTGRES_CONTAINER_NAME" ]; then
+    POSTGRES_CONTAINER_NAME=$(docker ps --format "{{.Names}}" | grep -i postgres | head -1)
+fi
+
+# Use docker exec to ensure we're connecting to Docker PostgreSQL, not local instance
+if [ -n "$POSTGRES_CONTAINER_NAME" ]; then
+    docker exec -i "$POSTGRES_CONTAINER_NAME" psql -U posduif -d tenant_1 <<EOF > /dev/null 2>&1 || true
     INSERT INTO users (id, username, user_type, online_status, created_at) 
     VALUES ('00000000-0000-0000-0000-000000000001', 'test_web_user', 'web', true, NOW()) 
     ON CONFLICT (username) DO NOTHING;
-" > /dev/null 2>&1 || true
+EOF
+else
+    echo -e "${YELLOW}⚠ Could not find PostgreSQL container. Skipping test user creation.${NC}"
+fi
 
 # Login and create enrollment token
 echo -e "${YELLOW}Creating enrollment token...${NC}"
@@ -212,24 +463,34 @@ if command -v python3 &> /dev/null; then
     
     # Generate QR code
     echo -e "${YELLOW}Generating QR code...${NC}"
-    $PYTHON_CMD << EOF
+    QR_OUTPUT=$($PYTHON_CMD << EOF 2>&1
 import qrcode
 import sys
 
-qr = qrcode.QRCode(version=1, box_size=10, border=5)
-qr.add_data('$ENROLLMENT_URL')
-qr.make(fit=True)
-
-img = qr.make_image(fill_color="black", back_color="white")
-img.save('/tmp/enrollment_qr.png')
-print("QR code saved to /tmp/enrollment_qr.png")
-EOF
+try:
+    qr = qrcode.QRCode(version=1, box_size=10, border=5)
+    qr.add_data('$ENROLLMENT_URL')
+    qr.make(fit=True)
     
-    if [ $? -eq 0 ]; then
+    img = qr.make_image(fill_color="black", back_color="white")
+    img.save('/tmp/enrollment_qr.png')
+    print("QR code saved to /tmp/enrollment_qr.png")
+    sys.exit(0)
+except Exception as e:
+    print(f"Error generating QR code: {e}", file=sys.stderr)
+    sys.exit(1)
+EOF
+    )
+    QR_EXIT_CODE=$?
+    
+    if [ $QR_EXIT_CODE -eq 0 ]; then
         echo -e "${GREEN}✓ QR code saved to /tmp/enrollment_qr.png${NC}"
         echo -e "${YELLOW}  Open it with: open /tmp/enrollment_qr.png${NC}"
     else
         echo -e "${RED}✗ Failed to generate QR code${NC}"
+        if [ -n "$QR_OUTPUT" ]; then
+            echo -e "${RED}  Error: $QR_OUTPUT${NC}"
+        fi
         echo -e "${YELLOW}  Use an online QR code generator with URL: $ENROLLMENT_URL${NC}"
     fi
     

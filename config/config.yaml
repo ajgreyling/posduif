@@ -1,5 +1,8 @@
 # Posduif Sync Engine Configuration
 
+# Web API Configuration (for web-api service)
+port: 8081  # Web API service port (default: 8081)
+
 # PostgreSQL Database Configuration
 postgres:
   host: localhost
@@ -39,6 +42,11 @@ sync:
   conflict_resolution: "last_write_wins"  # Options: "last_write_wins", "manual"
   retry_attempts: 3
   retry_backoff: 2s  # Exponential backoff base
+  wal:
+    enabled: true  # Enable WAL-based change detection (PostgreSQL 18+)
+    slot_name: ""  # Replication slot name (empty = auto-generated from tenant DB name)
+    batch_size: 100  # Number of WAL changes to read per batch
+    read_interval: "1s"  # How often to read WAL changes
 
 # Authentication Configuration
 auth:

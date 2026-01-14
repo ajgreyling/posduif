@@ -1,18 +1,23 @@
-version: '3.8'
-
 services:
   postgres:
-    image: postgres:16
+    image: postgres:18
     container_name: posduif-postgres
     environment:
       POSTGRES_USER: posduif
       POSTGRES_PASSWORD: secret
       POSTGRES_DB: tenant_1
+      # Configure PostgreSQL for logical replication
+      POSTGRES_INITDB_ARGS: "-c wal_level=logical"
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
       - ../config/database-init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: >
+      postgres
+      -c wal_level=logical
+      -c max_replication_slots=10
+      -c max_wal_senders=10
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U posduif"]
       interval: 10s
@@ -57,6 +62,26 @@ services:
     volumes:
       - ../config:/app/config
     command: ["./sync-engine", "--config=/app/config/config.yaml"]
+
+  web-api:
+    build:
+      context: ../web-api
+      dockerfile: Dockerfile
+    container_name: posduif-web-api
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: posduif
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: tenant_1
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../config:/root/config
+    command: ["./web-api", "--config=/root/config/config.yaml"]
 
 volumes:
   postgres_data:

@@ -21,7 +21,7 @@
 
     - name: Install PostgreSQL
       apt:
-        name: postgresql-16
+        name: postgresql-18
         state: present
 
     - name: Install Redis

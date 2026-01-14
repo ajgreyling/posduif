@@ -40,7 +40,7 @@ cat > /tmp/test-services.yml <<EOF
 version: '3.8'
 services:
   postgres:
-    image: postgres:16
+    image: postgres:18
     container_name: posduif-test-postgres
     environment:
       POSTGRES_USER: posduif

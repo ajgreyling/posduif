@@ -2,7 +2,9 @@
 
 ## Overview
 
-The Posduif messaging application uses PostgreSQL with a schema-per-tenant architecture. Each tenant has its own schema containing all tables and data. This document describes the complete database schema for the messaging application.
+The Posduif messaging application uses PostgreSQL 18+ with a database-per-tenant architecture. Each tenant has its own database containing all tables and data. This document describes the complete database schema for the messaging application.
+
+**WAL-Based Change Detection**: The system uses PostgreSQL logical replication with WAL (Write-Ahead Log) for efficient, real-time change detection. Each tenant database has a logical replication slot that tracks changes to the `messages` table.
 
 ## Schema Architecture
 
@@ -189,6 +191,7 @@ Tracks synchronization metadata for each mobile device.
 | id | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Unique metadata record identifier |
 | device_id | VARCHAR(255) | NOT NULL, UNIQUE | Mobile device identifier |
 | last_sync_timestamp | TIMESTAMP | NULL | Last successful sync timestamp |
+| last_synced_lsn | pg_lsn | NULL | Last synced Log Sequence Number (for WAL-based sync) |
 | pending_outgoing_count | INTEGER | DEFAULT 0 | Count of pending outgoing messages |
 | sync_status | VARCHAR(50) | DEFAULT 'idle' | Current sync status: 'idle', 'syncing', 'error' |
 | created_at | TIMESTAMP | DEFAULT NOW() | Record creation timestamp |
@@ -211,6 +214,7 @@ CREATE TABLE sync_metadata (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     device_id VARCHAR(255) NOT NULL UNIQUE,
     last_sync_timestamp TIMESTAMP,
+    last_synced_lsn pg_lsn,
     pending_outgoing_count INTEGER DEFAULT 0,
     sync_status VARCHAR(50) DEFAULT 'idle',
     created_at TIMESTAMP DEFAULT NOW(),
@@ -220,6 +224,7 @@ CREATE TABLE sync_metadata (
 
 CREATE INDEX idx_sync_metadata_device ON sync_metadata(device_id);
 CREATE INDEX idx_sync_metadata_status ON sync_metadata(sync_status);
+CREATE INDEX idx_sync_metadata_lsn ON sync_metadata(last_synced_lsn) WHERE last_synced_lsn IS NOT NULL;
 ```
 
 **Triggers:**

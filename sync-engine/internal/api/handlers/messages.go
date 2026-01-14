@@ -68,6 +68,13 @@ func (h *MessagesHandler) CreateMessage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Update sender's last_message_sent (trigger also does this, but we do it explicitly for sync)
+	sender, err := h.db.GetUserByID(r.Context(), userID)
+	if err == nil {
+		sender.LastMessageSent = &req.Content
+		h.db.UpdateUser(r.Context(), sender)
+	}
+
 	// Publish event
 	h.publisher.PublishNewMessage(r.Context(), msg.ID, req.RecipientID, 0)
 

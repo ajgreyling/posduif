@@ -41,3 +41,12 @@ final userIdProvider = FutureProvider<String?>((ref) async {
   return prefs.getString('user_id');
 });
 
+// Current User ID provider (synchronous)
+final currentUserIdProvider = StateProvider<String?>((ref) {
+  // This will be set after enrollment
+  return null; // Will be updated via SharedPreferences
+});// Helper to get current user ID synchronously
+Future<String?> getCurrentUserId() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getString('user_id');
+}

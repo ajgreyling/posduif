@@ -57,4 +57,9 @@ func (db *DB) HealthCheck(ctx context.Context) error {
 	return db.Pool.Ping(ctx)
 }
 
+// GetPool returns the underlying connection pool (for replication connections)
+func (db *DB) GetPool() *pgxpool.Pool {
+	return db.Pool
+}
+
 

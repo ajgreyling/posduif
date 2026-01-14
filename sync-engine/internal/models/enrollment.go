@@ -34,14 +34,14 @@ type EnrollmentDetails struct {
 type CompleteEnrollmentRequest struct {
 	Token      string                 `json:"token"`
 	DeviceID   string                 `json:"device_id"`
+	Username   string                 `json:"username"`
 	DeviceInfo map[string]interface{} `json:"device_info"`
 }
 
 type EnrollmentResult struct {
-	UserID             string `json:"user_id"`
-	DeviceID           string `json:"device_id"`
-	TenantID           string `json:"tenant_id"`
-	AppInstructionsURL string `json:"app_instructions_url"`
+	UserID   string `json:"user_id"`
+	DeviceID string `json:"device_id"`
+	TenantID string `json:"tenant_id"`
 }
 
 type AppInstructions struct {

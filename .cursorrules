@@ -13,7 +13,9 @@
 - **Backend**: Go 1.21+ (FOSS libraries only)
 - **Mobile**: Flutter 3.13+ with Dart (FOSS packages only)
 - **Web**: Flutter Web (FOSS packages only)
-- **Database**: PostgreSQL 16+ (schema-per-tenant)
+- **Database**: PostgreSQL 18+ (database-per-tenant)
+  - WAL-based change detection using logical replication
+  - Logical replication slots for real-time change tracking
 - **Cache/Messaging**: Redis (disk-backed Streams)
 - **Real-time**: Server-Sent Events (SSE)
 
